@@ -44,13 +44,16 @@ data class IctAnalysisEntity(
     val rawResult: String // JSON string
 )
 
-@Entity(tableName = "candle_history")
+@Entity(tableName = "candle_history", primaryKeys = ["symbol", "timeframe", "time"])
 data class CandleEntity(
-    @PrimaryKey val time: Long, // Unix timestamp in seconds
+    val time: Long, // Unix timestamp in seconds
     val symbol: String,
+    val timeframe: String,
     val open: Double,
     val high: Double,
     val low: Double,
     val close: Double,
-    val tickCount: Int
+    val tickCount: Int,
+    val closeTime: Long? = null,
+    val isClosed: Boolean = true
 )
