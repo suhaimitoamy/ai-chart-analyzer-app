@@ -4,60 +4,69 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 
 class CandleBuilder {
+    private val timeframeSeconds = linkedMapOf(
+        "M1" to 60L,
+        "M5" to 300L,
+        "M15" to 900L,
+        "H1" to 3600L,
+        "H4" to 14400L,
+        "D1" to 86400L
+    )
+
     private val _candles = mutableListOf<Candle>()
     val candles: List<Candle> get() = _candles.map { it.copy() }
 
-    private var currentCandle: Candle? = null
+    private val currentCandles = mutableMapOf<String, Candle>()
 
-    // Emit event when current candle updates
     private val _candleUpdated = MutableSharedFlow<Candle>(extraBufferCapacity = 64)
     val candleUpdated = _candleUpdated.asSharedFlow()
 
-    // Emit event when a candle is closed
     private val _candleClosed = MutableSharedFlow<Candle>(extraBufferCapacity = 64)
     val candleClosed = _candleClosed.asSharedFlow()
 
-    fun processTick(price: Double, timestamp: Long) {
+    fun processTick(symbol: String, price: Double, timestamp: Long) {
         if (price.isNaN() || timestamp <= 0) return
 
-        // Floor to the start of the minute (UTC)
-        // timestamp is assumed to be in seconds
-        val minuteTs = (timestamp / 60) * 60
+        timeframeSeconds.forEach { (timeframe, seconds) ->
+            val openTs = (timestamp / seconds) * seconds
+            val current = currentCandles[timeframe]
 
-        if (currentCandle == null || minuteTs > currentCandle!!.time) {
-            // Close out the previous candle
-            currentCandle?.let { closedCandle ->
-                val copy = closedCandle.copy()
-                _candles.add(copy)
-                _candleClosed.tryEmit(copy)
+            if (current == null || openTs > current.time) {
+                current?.let { closing ->
+                    val closed = closing.copy(
+                        closeTime = closing.time + seconds - 1,
+                        isClosed = true
+                    )
+                    _candles.add(closed)
+                    _candleClosed.tryEmit(closed)
+                }
+
+                currentCandles[timeframe] = Candle(
+                    symbol = symbol,
+                    timeframe = timeframe,
+                    time = openTs,
+                    closeTime = null,
+                    open = price,
+                    high = price,
+                    low = price,
+                    close = price,
+                    tickCount = 1,
+                    isClosed = false
+                )
+            } else {
+                current.high = maxOf(current.high, price)
+                current.low = minOf(current.low, price)
+                current.close = price
+                current.tickCount++
             }
 
-            // Open a brand-new candle
-            currentCandle = Candle(
-                time = minuteTs,
-                open = price,
-                high = price,
-                low = price,
-                close = price,
-                tickCount = 1
-            )
-        } else {
-            // Update in place
-            currentCandle?.let {
-                it.high = maxOf(it.high, price)
-                it.low = minOf(it.low, price)
-                it.close = price
-                it.tickCount++
+            currentCandles[timeframe]?.let {
+                _candleUpdated.tryEmit(it.copy())
             }
-        }
-
-        // Notify listeners of the update
-        currentCandle?.let {
-            _candleUpdated.tryEmit(it.copy())
         }
     }
 
-    fun getCurrentCandle(): Candle? {
-        return currentCandle?.copy()
+    fun getCurrentCandle(timeframe: String = "M1"): Candle? {
+        return currentCandles[timeframe]?.copy()
     }
 }
