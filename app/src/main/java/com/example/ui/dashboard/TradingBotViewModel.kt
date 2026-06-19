@@ -223,14 +223,21 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
 
                 aiClient = DeepSeekClient(settings.deepseekApiKey)
                 val selectedTimeframe = normalizeTimeframe(timeframe)
-                val recentCandles = loadCandlesForAnalysis(selectedTimeframe)
-                if (recentCandles.isEmpty()) {
-                    _analysisErrorText.value = "Candle belum tersedia dari REST/WebSocket. Tunggu log REST candle tersimpan, atau cek TwelveData API Key."
-                    log("Analysis failed: candle belum ada.")
+                val mtfTimeframe = getMtfTimeframe(selectedTimeframe)
+                val htfTimeframe = getHtfTimeframe(selectedTimeframe)
+                
+                val ltfCandles = loadCandlesForAnalysis(selectedTimeframe)
+                val mtfCandles = loadCandlesForAnalysis(mtfTimeframe)
+                val htfCandles = loadCandlesForAnalysis(htfTimeframe)
+                
+                if (ltfCandles.isEmpty() || mtfCandles.isEmpty() || htfCandles.isEmpty()) {
+                    _analysisErrorText.value = "Candle belum tersedia secara lengkap (Butuh $selectedTimeframe, $mtfTimeframe, $htfTimeframe). Tunggu sinkronisasi."
+                    log("Analysis failed: candle belum lengkap untuk MTF.")
                     return@launch
                 }
 
-                val prompt = buildIctPrompt(selectedTimeframe, session, notes, recentCandles)
+                val candlesMap = mapOf("LTF" to ltfCandles, "MTF" to mtfCandles, "HTF" to htfCandles)
+                val prompt = buildIctPrompt(selectedTimeframe, session, notes, candlesMap)
                 val responseStr = aiClient.analyzeChart(prompt)
 
                 if (responseStr.startsWith("DeepSeek API error") || responseStr.startsWith("Network error") || responseStr.startsWith("DeepSeek response") || responseStr.startsWith("DeepSeek API key kosong")) {
@@ -312,7 +319,7 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
             val sourceSeconds = timeframeToSeconds(sourceTimeframe)
             val targetSeconds = timeframeToSeconds(target)
             val multiplier = (targetSeconds / sourceSeconds).toInt().coerceAtLeast(1)
-            val limit = (120 * multiplier + multiplier * 5).coerceAtMost(4000)
+            val limit = (120 * multiplier + multiplier * 5).coerceAtMost(15000)
             val sourceCandles = db.candleDao().getRecentCandles("XAU/USD", sourceTimeframe, limit).reversed()
             if (sourceCandles.isNotEmpty()) {
                 val aggregated = if (sourceTimeframe == target) sourceCandles else aggregateCandles(sourceCandles, target)
@@ -350,9 +357,9 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
         timeframe: String,
         session: String,
         notes: String,
-        candles: List<CandleEntity>
+        candlesMap: Map<String, List<CandleEntity>>
     ): String {
-        val marketSnapshot = buildLocalMarketSnapshot(candles, timeframe, session)
+        val marketSnapshot = buildLocalMarketSnapshot(candlesMap, timeframe, session)
         return """
 Kamu adalah ICT (Inner Circle Trader) expert analyst profesional khusus XAUUSD (Gold/USD).
 
@@ -426,36 +433,45 @@ Output wajib JSON valid saja, tanpa markdown, tanpa teks tambahan, dengan strukt
     }
 
     private fun buildLocalMarketSnapshot(
-        candles: List<CandleEntity>,
+        candlesMap: Map<String, List<CandleEntity>>,
         timeframe: String,
         session: String
     ): String {
-        val recent = candles.takeLast(60)
-        val latest = recent.last()
-        val previous = recent.dropLast(1)
-        val last20 = previous.takeLast(20).ifEmpty { previous.ifEmpty { recent } }
-        val high20 = last20.maxOfOrNull { it.high } ?: latest.high
-        val low20 = last20.minOfOrNull { it.low } ?: latest.low
-        val high60 = recent.maxOf { it.high }
-        val low60 = recent.minOf { it.low }
-        val equilibrium = (high60 + low60) / 2.0
+        val ltfCandles = candlesMap["LTF"] ?: emptyList()
+        val mtfCandles = candlesMap["MTF"] ?: emptyList()
+        val htfCandles = candlesMap["HTF"] ?: emptyList()
+        
+        val recentLtf = ltfCandles.takeLast(60)
+        val recentMtf = mtfCandles.takeLast(60)
+        val recentHtf = htfCandles.takeLast(60)
+        
+        val latest = recentLtf.last()
+        val currentPrice = latest.close
+        
+        val bias = calculateBias(recentHtf)
+        val htfHigh = recentHtf.maxOf { it.high }
+        val htfLow = recentHtf.minOf { it.low }
+        val equilibrium = (htfHigh + htfLow) / 2.0
         val premiumDiscount = when {
-            latest.close > equilibrium -> "Premium"
-            latest.close < equilibrium -> "Discount"
+            currentPrice > equilibrium -> "Premium"
+            currentPrice < equilibrium -> "Discount"
             else -> "Equilibrium"
         }
 
-        val highsAndLows = getSwings(recent)
-        val swingHighs = highsAndLows.first
-        val swingLows = highsAndLows.second
-        val currentPrice = latest.close
-        val nearestSupport = swingLows.map { it.low }.filter { it < currentPrice }.maxOrNull()
-        val nearestResistance = swingHighs.map { it.high }.filter { it > currentPrice }.minOrNull()
-        val bias = calculateBias(recent)
-        val choppy = isChoppy(recent)
-        val atr = calculateAtr(recent)
-        val structure = buildStructureState(recent, swingHighs, swingLows, bias, nearestSupport, nearestResistance, choppy)
-        val candlePack = recent.takeLast(20).joinToString(separator = "\n") { candle ->
+        val mtfSwings = getSwings(recentMtf)
+        val structure = buildStructureState(recentMtf, mtfSwings.first, mtfSwings.second, bias, null, null, isChoppy(recentMtf))
+
+        val ltfSwings = getSwings(recentLtf)
+        val nearestSupport = ltfSwings.second.map { it.low }.filter { it < currentPrice }.maxOrNull()
+        val nearestResistance = ltfSwings.first.map { it.high }.filter { it > currentPrice }.minOrNull()
+        val atr = calculateAtr(recentLtf)
+        val choppy = isChoppy(recentLtf)
+        val high20 = ltfSwings.first.takeLast(2).maxOfOrNull { it.high } ?: recentLtf.takeLast(20).maxOf { it.high }
+        val low20 = ltfSwings.second.takeLast(2).minOfOrNull { it.low } ?: recentLtf.takeLast(20).minOf { it.low }
+        val ltfHigh60 = recentLtf.maxOf { it.high }
+        val ltfLow60 = recentLtf.minOf { it.low }
+        
+        val candlePack = recentLtf.takeLast(20).joinToString(separator = "\n") { candle ->
             "${candle.time}: O=${formatPrice(candle.open)}, H=${formatPrice(candle.high)}, L=${formatPrice(candle.low)}, C=${formatPrice(candle.close)}, ticks=${candle.tickCount}"
         }
 
@@ -463,8 +479,8 @@ Output wajib JSON valid saja, tanpa markdown, tanpa teks tambahan, dengan strukt
 Symbol: XAU/USD
 Requested timeframe: $timeframe
 Session: $session
-Closed candles used: ${recent.size}
-Current price: ${formatPrice(latest.close)}
+Closed candles used: ${recentLtf.size}
+Current price: ${formatPrice(currentPrice)}
 Market bias: $bias
 Market phase: ${structure["phase"]}
 Break / MSS: ${structure["break"]}
@@ -476,13 +492,15 @@ Nearest resistance: ${formatPriceOrDash(nearestResistance)}
 Nearest support: ${formatPriceOrDash(nearestSupport)}
 Last 20 swing high: ${formatPrice(high20)}
 Last 20 swing low: ${formatPrice(low20)}
-60 candle range high: ${formatPrice(high60)}
-60 candle range low: ${formatPrice(low60)}
+60 candle range high: ${formatPrice(ltfHigh60)}
+60 candle range low: ${formatPrice(ltfLow60)}
+HTF Range high: ${formatPrice(htfHigh)}
+HTF Range low: ${formatPrice(htfLow)}
 Equilibrium: ${formatPrice(equilibrium)}
 Current zone: $premiumDiscount
 Liquidity: ${structure["liquidity"]}
-FVG: ${findLatestFvg(recent)}
-Order block reference: ${findOrderBlockReference(recent)}
+FVG: ${findLatestFvg(recentLtf)}
+Order block reference: ${findOrderBlockReference(recentLtf)}
 
 Last 20 closed candles:
 $candlePack
@@ -655,6 +673,28 @@ $candlePack
 
     private fun isValidXauPrice(price: Double): Boolean {
         return price in 1000.0..5000.0
+    }
+
+    private fun getMtfTimeframe(ltf: String): String {
+        return when (ltf) {
+            "M1" -> "M15"
+            "M5" -> "M30"
+            "M15" -> "H1"
+            "M30" -> "H4"
+            "H1" -> "H4"
+            "H4", "D1", "W1" -> "D1"
+            else -> "M15"
+        }
+    }
+
+    private fun getHtfTimeframe(ltf: String): String {
+        return when (ltf) {
+            "M1", "M5" -> "H1"
+            "M15" -> "H4"
+            "M30", "H1" -> "D1"
+            "H4", "D1", "W1" -> "W1"
+            else -> "H1"
+        }
     }
 
     private fun normalizeTimeframe(timeframe: String): String {
