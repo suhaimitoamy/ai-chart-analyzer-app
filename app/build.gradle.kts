@@ -59,6 +59,39 @@ secrets {
   defaultPropertiesFileName = ".env.example"
 }
 
+tasks.named("preBuild") {
+  doFirst {
+    val dashboardFile = file("src/main/java/com/example/ui/dashboard/DashboardScreen.kt")
+    if (dashboardFile.exists()) {
+      val original = dashboardFile.readText()
+      val patched = original
+        .replace(
+          """LaunchedEffect(Unit) {
+        viewModel.startBot()
+    }""",
+          """LaunchedEffect(Unit) {
+        if (viewModel.settings.areKeysSet()) {
+            viewModel.startBot()
+        } else {
+            viewModel.log("Menunggu API Key di Settings.")
+        }
+    }"""
+        )
+        .replace(
+          """Text("Save & Start Bot", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 16.sp)""",
+          """Text(if (viewModel.settings.areKeysSet()) "API Keys Tersimpan" else "Simpan API Keys", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 16.sp)"""
+        )
+        .replace(
+          """Text("✅ Tersimpan! Bot mencoba untuk menyala...", color = UiColors.BullishGreen, fontSize = 14.sp)""",
+          """Text("✅ API Keys tersimpan. CandleBuilder akan berjalan setelah key valid.", color = UiColors.BullishGreen, fontSize = 14.sp)"""
+        )
+      if (patched != original) {
+        dashboardFile.writeText(patched)
+      }
+    }
+  }
+}
+
 // Some unused dependencies are commented out below instead of being removed.
 // This makes it easy to add them back in the future if needed.
 dependencies {
