@@ -62,11 +62,9 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
 
     init {
         viewModelScope.launch {
-            // init wallet if null
             if (db.walletDao().getWallet().firstOrNull() == null) {
                 db.walletDao().insert(WalletEntity())
             }
-            // Seed methods if empty
             if (db.methodDao().getAllMethods().firstOrNull()?.isEmpty() == true) {
                 db.methodDao().insert(TradingMethodEntity(name = "Price Action", description = "Standard PA"))
                 db.methodDao().insert(TradingMethodEntity(name = "SMC / ICT", description = "Smart Money Concepts"))
@@ -87,7 +85,7 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
         if (_botStatus.value == "Running") return
         if (!settings.areKeysSet()) {
             _botStatus.value = "Error: API Keys not set"
-            log("Gagal Start: Harap isi semua API Key di menu Settings!")
+            log("Menunggu API Key di Settings.")
             return
         }
 
@@ -97,15 +95,7 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
         _botStatus.value = "Running"
         viewModelScope.launch {
             log("Fetching Historical Candles for XAU/USD...")
-            try {
-                val history = twelveClient?.fetchHistoricalCandles("XAU/USD", "1min", 100) ?: emptyList()
-                if (history.isNotEmpty()) {
-                    db.candleDao().insertAll(history)
-                    log("Berhasil menarik ${history.size} candle histori M1 ke database.")
-                }
-            } catch (e: Exception) {
-                log("Gagal menarik histori: ${e.message}")
-            }
+            fetchAndSaveHistoricalCandles()
 
             log("Connecting to TwelveData WebSocket (XAU/USD)...")
             twelveClient?.connect("XAU/USD")
@@ -127,7 +117,6 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
                     )
                     db.candleDao().insert(entity)
 
-                    // Reduce terminal spam: skip M1 logs, only log M5+ or every 5th M1
                     if (candle.timeframe != "M1") {
                         log("${candle.timeframe} closed. C:${formatPrice(candle.close)} Ticks:${candle.tickCount}")
                     } else {
@@ -150,30 +139,60 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
                         candleBuilder.processTick("XAU/USD", price, timestamp)
                         
                         val currentTime = System.currentTimeMillis()
-                        
                         if (lastPrice > 0) {
                             val diff = price - lastPrice
-                            if (Math.abs(diff) >= 3.0) {
-                                if (currentTime - lastWarningTime >= 300_000) {
-                                    lastWarningTime = currentTime
-                                    val dirStr = if (diff > 0) "MELONJAK NAIK 🚀" else "ANJLOK TURUN 🩸"
-                                    val msg = """
-                                        🚨 **WARNING: IMPULSIVE MOVE DETECTED!** 🚨
-                                        
-                                        XAU/USD $dirStr tajam!
-                                        Pergerakan: ${String.format("%.2f", Math.abs(diff))} poin dalam waktu singkat
-                                        Harga saat ini: $price
-                                    """.trimIndent()
-                                    
-                                    log(msg)
-                                    log("Impulsive move warning logged.")
-                                }
+                            if (Math.abs(diff) >= 3.0 && currentTime - lastWarningTime >= 300_000) {
+                                lastWarningTime = currentTime
+                                val dirStr = if (diff > 0) "MELONJAK NAIK 🚀" else "ANJLOK TURUN 🩸"
+                                val msg = """
+                                    🚨 WARNING: IMPULSIVE MOVE DETECTED!
+                                    XAU/USD $dirStr tajam.
+                                    Pergerakan: ${String.format(Locale.US, "%.2f", Math.abs(diff))} poin
+                                    Harga saat ini: $price
+                                """.trimIndent()
+                                log(msg)
                             }
                         }
                         lastPrice = price
                     }
                 }
             }
+        }
+    }
+
+    private suspend fun fetchAndSaveHistoricalCandles() {
+        val client = twelveClient ?: return
+        val requests = listOf(
+            Triple("1min", "M1", 500),
+            Triple("5min", "M5", 300),
+            Triple("15min", "M15", 250),
+            Triple("30min", "M30", 200),
+            Triple("1h", "H1", 200),
+            Triple("4h", "H4", 120),
+            Triple("1day", "D1", 90),
+            Triple("1week", "W1", 40)
+        )
+
+        var totalSaved = 0
+        requests.forEach { (interval, timeframe, outputSize) ->
+            try {
+                val history = client.fetchHistoricalCandles("XAU/USD", interval, outputSize)
+                if (history.isNotEmpty()) {
+                    db.candleDao().insertAll(history)
+                    totalSaved += history.size
+                    log("REST $timeframe: ${history.size} candle tersimpan.")
+                } else {
+                    log("REST $timeframe: 0 candle.")
+                }
+            } catch (e: Exception) {
+                log("REST $timeframe gagal: ${e.message}")
+            }
+        }
+
+        if (totalSaved > 0) {
+            log("Historical candle siap: $totalSaved candle tersimpan ke database.")
+        } else {
+            log("Historical candle belum masuk. Cek TwelveData API Key / limit / symbol XAU/USD.")
         }
     }
     
@@ -206,7 +225,7 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
                 val selectedTimeframe = normalizeTimeframe(timeframe)
                 val recentCandles = loadCandlesForAnalysis(selectedTimeframe)
                 if (recentCandles.isEmpty()) {
-                    _analysisErrorText.value = "Candle real belum tersedia. Start bot dulu di Settings sampai candle M1 tersimpan."
+                    _analysisErrorText.value = "Candle belum tersedia dari REST/WebSocket. Tunggu log REST candle tersimpan, atau cek TwelveData API Key."
                     log("Analysis failed: candle belum ada.")
                     return@launch
                 }
@@ -214,7 +233,6 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
                 val prompt = buildIctPrompt(selectedTimeframe, session, notes, recentCandles)
                 val responseStr = aiClient.analyzeChart(prompt)
 
-                // Detect DeepSeek error responses before trying to parse JSON
                 if (responseStr.startsWith("DeepSeek API error") || responseStr.startsWith("Network error") || responseStr.startsWith("DeepSeek response") || responseStr.startsWith("DeepSeek API key kosong")) {
                     _analysisErrorText.value = responseStr
                     log("Analysis error. Lihat tab Analyze.")
@@ -222,7 +240,6 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
                 }
 
                 val cleanJson = extractJsonObject(responseStr)
-
                 if (cleanJson == null) {
                     _analysisErrorText.value = "AI tidak mengembalikan JSON valid.\nResponse: ${responseStr.take(200)}"
                     log("Analysis failed: response bukan JSON.")
@@ -231,14 +248,13 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
 
                 val json = JSONObject(cleanJson)
                 val currentPrice = json.optDouble("current_price", recentCandles.last().close)
-                
                 val newAnalysis = IctAnalysisEntity(
                     timeframe = json.optString("timeframe", selectedTimeframe),
                     session = json.optString("session_context", session),
                     bias = json.optString("bias", "NEUTRAL"),
                     confidence = json.optInt("confidence_score", 0),
                     price = "$${formatPrice(currentPrice)}",
-                    date = java.text.SimpleDateFormat("dd MMM yyyy, HH.mm", java.util.Locale.getDefault()).format(java.util.Date()),
+                    date = java.text.SimpleDateFormat("dd MMM yyyy, HH.mm", Locale.getDefault()).format(java.util.Date()),
                     rawResult = cleanJson
                 )
                 db.ictAnalysisDao().insert(newAnalysis)
@@ -263,7 +279,6 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
                 reader?.useLines { lines ->
                     lineCount = lines.count()
                 }
-                
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     log("Parsed $lineCount lines from ${uri.lastPathSegment}.")
                     log("AI tidak dipanggil otomatis dari upload file. Klik Analisis ICT Sekarang untuk menjalankan AI manual.")
@@ -277,21 +292,41 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private suspend fun loadCandlesForAnalysis(timeframe: String): List<CandleEntity> {
-        val stored = db.candleDao().getRecentCandles("XAU/USD", timeframe, 120).reversed()
-        if (stored.size >= 20 || timeframe == "M1") return stored
+        val target = normalizeTimeframe(timeframe)
+        val stored = db.candleDao().getRecentCandles("XAU/USD", target, 120).reversed()
+        if (stored.isNotEmpty()) return stored
 
-        val factor = (timeframeToSeconds(timeframe) / 60L).toInt().coerceAtLeast(1)
-        val m1Limit = (120 * factor + factor * 5).coerceAtMost(2000)
-        val m1Candles = db.candleDao().getRecentCandles("XAU/USD", "M1", m1Limit).reversed()
-        return aggregateCandles(m1Candles, timeframe).takeLast(120)
+        val sourceOrder = when (target) {
+            "M1" -> listOf("M1")
+            "M5" -> listOf("M1")
+            "M15" -> listOf("M1", "M5")
+            "M30" -> listOf("M1", "M5", "M15")
+            "H1" -> listOf("M1", "M5", "M15", "M30")
+            "H4" -> listOf("M1", "M5", "M15", "M30", "H1")
+            "D1" -> listOf("M5", "M15", "M30", "H1", "H4")
+            "W1" -> listOf("H1", "H4", "D1")
+            else -> listOf("M1")
+        }
+
+        for (sourceTimeframe in sourceOrder) {
+            val sourceSeconds = timeframeToSeconds(sourceTimeframe)
+            val targetSeconds = timeframeToSeconds(target)
+            val multiplier = (targetSeconds / sourceSeconds).toInt().coerceAtLeast(1)
+            val limit = (120 * multiplier + multiplier * 5).coerceAtMost(4000)
+            val sourceCandles = db.candleDao().getRecentCandles("XAU/USD", sourceTimeframe, limit).reversed()
+            if (sourceCandles.isNotEmpty()) {
+                val aggregated = if (sourceTimeframe == target) sourceCandles else aggregateCandles(sourceCandles, target)
+                if (aggregated.isNotEmpty()) return aggregated.takeLast(120)
+            }
+        }
+
+        return emptyList()
     }
 
-    private fun aggregateCandles(m1Candles: List<CandleEntity>, timeframe: String): List<CandleEntity> {
-        if (m1Candles.isEmpty()) return emptyList()
+    private fun aggregateCandles(sourceCandles: List<CandleEntity>, timeframe: String): List<CandleEntity> {
+        if (sourceCandles.isEmpty()) return emptyList()
         val seconds = timeframeToSeconds(timeframe)
-        if (seconds <= 60L) return m1Candles
-
-        return m1Candles
+        return sourceCandles
             .groupBy { (it.time / seconds) * seconds }
             .toSortedMap()
             .map { (openTs, rows) ->
@@ -332,7 +367,8 @@ Tugas:
 1. Tentukan bias: BULLISH, BEARISH, atau NEUTRAL.
 2. Jelaskan struktur market secara ringkas.
 3. Tentukan zona penting: liquidity, FVG, order block, premium/discount.
-4. Berikan setup hanya jika valid. Jika belum valid, tulis wait.
+4. Berikan setup hanya jika valid; jika belum valid, tulis wait.
+5. Sertakan market_structure, order_blocks, fvg, liquidity, premium_discount, trade_setup, key_notes, dan warnings.
 
 Output wajib JSON valid saja, tanpa markdown, tanpa teks tambahan, dengan struktur:
 {
@@ -348,15 +384,43 @@ Output wajib JSON valid saja, tanpa markdown, tanpa teks tambahan, dengan strukt
     "tp1": 0.0,
     "tp2": 0.0,
     "stop_loss": 0.0,
-    "risk_reward": "rasio"
+    "risk_reward": "rasio",
+    "invalidation": "level invalidasi"
   },
   "market_structure": {
     "trend": "Bullish/Bearish/Range",
+    "last_bos": "BOS terakhir",
+    "choch": "CHoCH/MSS terakhir",
+    "swing_high": 0.0,
+    "swing_low": 0.0,
     "liquidity": "ringkasan",
     "fvg": "ringkasan",
     "order_block": "ringkasan",
     "premium_discount": "ringkasan"
-  }
+  },
+  "order_blocks": {
+    "bullish_ob": "area bullish OB",
+    "bearish_ob": "area bearish OB",
+    "description": "catatan OB"
+  },
+  "fvg": {
+    "bullish_fvg": "area bullish FVG",
+    "bearish_fvg": "area bearish FVG",
+    "description": "catatan FVG"
+  },
+  "liquidity": {
+    "buy_side": "BSL terdekat",
+    "sell_side": "SSL terdekat",
+    "sweep_occurred": false,
+    "description": "catatan liquidity"
+  },
+  "premium_discount": {
+    "equilibrium": 0.0,
+    "current_zone": "PREMIUM/DISCOUNT/EQUILIBRIUM",
+    "ote_zone": "62-79% zone"
+  },
+  "key_notes": ["catatan penting"],
+  "warnings": ["peringatan risiko"]
 }
 """.trimIndent()
     }
@@ -454,18 +518,15 @@ $candlePack
             val h1 = highs.last().high
             val l2 = lows[lows.size - 2].low
             val l1 = lows.last().low
-
             val hh = h1 > h2
             val hl = l1 > l2
             val lh = h1 < h2
             val ll = l1 < l2
-
             if (hh && hl) return "bullish"
             if (lh && ll) return "bearish"
             if (hh && ll) return "expanding"
             if (lh && hl) return "choppy"
         }
-
         val closes = candles.takeLast(5).map { it.close }
         val avg = closes.average()
         return if (candles.last().close > avg) "bullish" else "bearish"
@@ -598,7 +659,7 @@ $candlePack
 
     private fun normalizeTimeframe(timeframe: String): String {
         return when (timeframe.uppercase(Locale.US)) {
-            "M1", "M5", "M15", "H1", "H4", "D1" -> timeframe.uppercase(Locale.US)
+            "M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1" -> timeframe.uppercase(Locale.US)
             else -> "M1"
         }
     }
@@ -608,9 +669,11 @@ $candlePack
             "M1" -> 60L
             "M5" -> 300L
             "M15" -> 900L
+            "M30" -> 1800L
             "H1" -> 3600L
             "H4" -> 14400L
             "D1" -> 86400L
+            "W1" -> 604800L
             else -> 60L
         }
     }
@@ -626,12 +689,10 @@ $candlePack
     fun generatePdfReport(context: android.content.Context) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val allTrades = db.tradeDao().getAllTrades().firstOrNull() ?: emptyList()
-            
             val wins = allTrades.count { it.result == "WIN" }
             val losses = allTrades.count { it.result == "LOSS" }
             val total = wins + losses
             val winRate = if (total > 0) (wins.toFloat() / total) * 100 else 0f
-            
             var grossProfit = 0.0
             var grossLoss = 0.0
             for (trade in allTrades) {
@@ -641,10 +702,8 @@ $candlePack
                     grossLoss += Math.abs(trade.entryPrice - trade.stopLoss)
                 }
             }
-            
             val profitFactor = if (grossLoss > 0) grossProfit / grossLoss else if (grossProfit > 0) 99.99 else 0.0
             val avgDrawdown = if (losses > 0) grossLoss / losses else 0.0
-            
             try {
                 val file = PdfGenerator.createReport(
                     context, wins, losses, winRate, profitFactor, avgDrawdown, allTrades.size
