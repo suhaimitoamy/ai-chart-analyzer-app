@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import org.json.JSONObject
 
 object UiColors {
     val Background = Color(0xFF0F111A)
@@ -400,7 +401,8 @@ fun AnalyzeTab(viewModel: TradingBotViewModel) {
 
     val isAnalyzing by viewModel.isAnalyzing.collectAsState()
     val ictAnalyses by viewModel.ictAnalyses.collectAsState()
-    val recentAnalysis = ictAnalyses.firstOrNull()
+    val analysisResultJson by viewModel.analysisResultJson.collectAsState()
+    val analysisErrorText by viewModel.analysisErrorText.collectAsState()
 
     var selectedFileName by remember { mutableStateOf<String?>(null) }
     val filePickerLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) { uri ->
@@ -566,19 +568,205 @@ fun AnalyzeTab(viewModel: TradingBotViewModel) {
                 }
             }
         }
-        
-        if (recentAnalysis != null) {
+
+        // Error card
+        if (analysisErrorText != null) {
             item {
-                Column(modifier = Modifier.fillMaxWidth().background(UiColors.Surface, RoundedCornerShape(16.dp)).padding(20.dp)) {
-                    Text("HASIL ANALISIS", color = UiColors.PrimaryYellow, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Bias: ${recentAnalysis.bias}", color = UiColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    Text("Confidence: ${recentAnalysis.confidence}%", color = UiColors.TextSecondary, fontSize = 14.sp)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF2A1C1C), RoundedCornerShape(16.dp))
+                        .border(1.dp, Color(0xFF4A2B2B), RoundedCornerShape(16.dp))
+                        .padding(20.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = UiColors.BearishRed, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("❌ ANALISIS GAGAL", color = UiColors.BearishRed, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text(recentAnalysis.rawResult, color = UiColors.TextPrimary, fontSize = 12.sp)
+                    Text(analysisErrorText ?: "", color = Color(0xFFFF8A80), fontSize = 13.sp)
                 }
             }
         }
+
+        // Structured result card
+        if (analysisResultJson != null) {
+            item {
+                val json = try { JSONObject(analysisResultJson!!) } catch (_: Exception) { null }
+                if (json != null) {
+                    val bias = json.optString("bias", "-")
+                    val confidence = json.optInt("confidence_score", 0)
+                    val currentPrice = json.optDouble("current_price", 0.0)
+                    val dailySummary = json.optString("daily_bias_summary", "-")
+                    val ms = json.optJSONObject("market_structure")
+                    val ts = json.optJSONObject("trade_setup")
+                    val isBullish = bias.equals("BULLISH", true)
+                    val biasColor = when {
+                        isBullish -> UiColors.BullishGreen
+                        bias.equals("BEARISH", true) -> UiColors.BearishRed
+                        else -> UiColors.PrimaryYellow
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                if (isBullish) Color(0xFF162B1D) else if (bias.equals("BEARISH", true)) Color(0xFF2A1C1C) else UiColors.Surface,
+                                RoundedCornerShape(16.dp)
+                            )
+                            .border(
+                                1.dp,
+                                if (isBullish) Color(0xFF234B2F) else if (bias.equals("BEARISH", true)) Color(0xFF4A2B2B) else UiColors.SurfaceLight,
+                                RoundedCornerShape(16.dp)
+                            )
+                            .padding(20.dp)
+                    ) {
+                        // Header
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.GpsFixed, contentDescription = null, tint = UiColors.PrimaryYellow, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("HASIL ANALISIS ICT", color = UiColors.PrimaryYellow, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Bias & Confidence row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    if (isBullish) Icons.Default.TrendingUp else Icons.Default.TrendingDown,
+                                    contentDescription = null,
+                                    tint = biasColor,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(bias, color = biasColor, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("Confidence", color = UiColors.TextSecondary, fontSize = 11.sp)
+                                Text("$confidence%", color = UiColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        HorizontalDivider(color = UiColors.SurfaceLight)
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Price & Summary
+                        AnalysisRow("Current Price", if (currentPrice > 0) String.format(java.util.Locale.US, "$%.2f", currentPrice) else "-")
+                        AnalysisRow("Daily Bias Summary", dailySummary)
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        HorizontalDivider(color = UiColors.SurfaceLight)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("MARKET STRUCTURE", color = UiColors.PrimaryYellow, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        AnalysisRow("Trend", ms?.optString("trend", "-") ?: "-")
+                        AnalysisRow("Liquidity", ms?.optString("liquidity", "-") ?: "-")
+                        AnalysisRow("FVG", ms?.optString("fvg", "-") ?: "-")
+                        AnalysisRow("Order Block", ms?.optString("order_block", "-") ?: "-")
+                        AnalysisRow("Premium / Discount", ms?.optString("premium_discount", "-") ?: "-")
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        HorizontalDivider(color = UiColors.SurfaceLight)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("TRADE SETUP", color = UiColors.PrimaryYellow, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        val setupStatus = ts?.optString("status", "-") ?: "-"
+                        val statusColor = if (setupStatus.equals("valid", true)) UiColors.BullishGreen else UiColors.PrimaryYellow
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Status", color = UiColors.TextSecondary, fontSize = 13.sp)
+                            Text(
+                                setupStatus.uppercase(java.util.Locale.US),
+                                color = statusColor,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        AnalysisRow("Entry Zone", ts?.optString("entry_zone", "-") ?: "-")
+                        AnalysisRow("TP1", formatTradeValue(ts?.opt("tp1")))
+                        AnalysisRow("TP2", formatTradeValue(ts?.opt("tp2")))
+                        AnalysisRow("Stop Loss", formatTradeValue(ts?.opt("stop_loss")))
+                        AnalysisRow("Risk / Reward", ts?.optString("risk_reward", "-") ?: "-")
+                    }
+                }
+            }
+        }
+
+        // History from DB (fallback when no live result)
+        if (analysisResultJson == null && analysisErrorText == null) {
+            val recentAnalysis = ictAnalyses.firstOrNull()
+            if (recentAnalysis != null) {
+                item {
+                    val json = try { JSONObject(recentAnalysis.rawResult) } catch (_: Exception) { null }
+                    if (json != null) {
+                        val bias = json.optString("bias", recentAnalysis.bias)
+                        val confidence = json.optInt("confidence_score", recentAnalysis.confidence)
+                        val currentPrice = json.optDouble("current_price", 0.0)
+                        val ms = json.optJSONObject("market_structure")
+                        val ts = json.optJSONObject("trade_setup")
+                        val isBullish = bias.equals("BULLISH", true)
+                        val biasColor = when {
+                            isBullish -> UiColors.BullishGreen
+                            bias.equals("BEARISH", true) -> UiColors.BearishRed
+                            else -> UiColors.PrimaryYellow
+                        }
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(UiColors.Surface, RoundedCornerShape(16.dp))
+                                .border(1.dp, UiColors.SurfaceLight, RoundedCornerShape(16.dp))
+                                .padding(20.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.History, contentDescription = null, tint = UiColors.TextSecondary, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("ANALISIS TERAKHIR", color = UiColors.TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.weight(1f))
+                                Text(recentAnalysis.date, color = UiColors.TextSecondary, fontSize = 11.sp)
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    if (isBullish) Icons.Default.TrendingUp else Icons.Default.TrendingDown,
+                                    contentDescription = null,
+                                    tint = biasColor,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(bias, color = biasColor, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Text("$confidence%", color = UiColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            }
+                            if (currentPrice > 0) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                AnalysisRow("Price", String.format(java.util.Locale.US, "$%.2f", currentPrice))
+                            }
+                            if (ms != null) {
+                                AnalysisRow("Trend", ms.optString("trend", "-"))
+                                AnalysisRow("Liquidity", ms.optString("liquidity", "-"))
+                            }
+                            if (ts != null) {
+                                val status = ts.optString("status", "-")
+                                AnalysisRow("Setup", status.uppercase(java.util.Locale.US))
+                                AnalysisRow("Entry", ts.optString("entry_zone", "-"))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         item { Spacer(modifier = Modifier.height(24.dp)) }
     }
 }
@@ -785,9 +973,15 @@ fun FilterChip(text: String, isSelected: Boolean) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsTab(viewModel: TradingBotViewModel) {
-    var twelveKey by remember { mutableStateOf(viewModel.settings.twelveApiKey) }
-    var deepseekKey by remember { mutableStateOf(viewModel.settings.deepseekApiKey) }
+    val savedTwelve = viewModel.settings.twelveApiKey
+    val savedDeepseek = viewModel.settings.deepseekApiKey
+    val keysAlreadySaved = savedTwelve.isNotBlank() && savedDeepseek.isNotBlank()
+
+    var twelveKey by remember { mutableStateOf(savedTwelve) }
+    var deepseekKey by remember { mutableStateOf(savedDeepseek) }
     var isSaved by remember { mutableStateOf(false) }
+
+    val hasEdited = twelveKey != savedTwelve || deepseekKey != savedDeepseek
 
     LazyColumn(
         modifier = Modifier
@@ -804,7 +998,7 @@ fun SettingsTab(viewModel: TradingBotViewModel) {
         item {
             OutlinedTextField(
                 value = twelveKey,
-                onValueChange = { twelveKey = it },
+                onValueChange = { twelveKey = it; isSaved = false },
                 label = { Text("Twelve Data API Key") },
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -820,7 +1014,7 @@ fun SettingsTab(viewModel: TradingBotViewModel) {
         item {
             OutlinedTextField(
                 value = deepseekKey,
-                onValueChange = { deepseekKey = it },
+                onValueChange = { deepseekKey = it; isSaved = false },
                 label = { Text("DeepSeek API Key") },
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -835,20 +1029,60 @@ fun SettingsTab(viewModel: TradingBotViewModel) {
 
         item {
             Spacer(modifier = Modifier.height(16.dp))
-            Button(
-                onClick = {
-                    viewModel.saveKeys(twelveKey, deepseekKey)
-                    isSaved = true
-                    viewModel.startBot()
-                },
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = UiColors.PrimaryYellow)
-            ) {
-                Text("Save & Start Bot", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            }
-            if (isSaved) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("✅ Tersimpan! Bot mencoba untuk menyala...", color = UiColors.BullishGreen, fontSize = 14.sp)
+            when {
+                // Keys saved and not edited -> show "saved" state
+                keysAlreadySaved && !hasEdited && !isSaved -> {
+                    Button(
+                        onClick = { },
+                        enabled = false,
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            disabledContainerColor = Color(0xFF1B3A2A),
+                            disabledContentColor = UiColors.BullishGreen
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = UiColors.BullishGreen, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("API Keys Tersimpan", color = UiColors.BullishGreen, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("✅ Bot siap digunakan", color = UiColors.BullishGreen, fontSize = 14.sp)
+                }
+                // User edited keys -> show "save changes"
+                hasEdited -> {
+                    Button(
+                        onClick = {
+                            viewModel.saveKeys(twelveKey, deepseekKey)
+                            isSaved = true
+                            viewModel.startBot()
+                        },
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = UiColors.PrimaryYellow),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Simpan Perubahan", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
+                }
+                // First time or just saved
+                else -> {
+                    Button(
+                        onClick = {
+                            viewModel.saveKeys(twelveKey, deepseekKey)
+                            isSaved = true
+                            viewModel.startBot()
+                        },
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = UiColors.PrimaryYellow),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Save & Start Bot", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
+                    if (isSaved) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("✅ Tersimpan! Bot mencoba untuk menyala...", color = UiColors.BullishGreen, fontSize = 14.sp)
+                    }
+                }
             }
         }
     }
@@ -884,5 +1118,29 @@ fun TerminalTab(viewModel: TradingBotViewModel) {
                 )
             }
         }
+    }
+}
+
+@Composable
+fun AnalysisRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, color = UiColors.TextSecondary, fontSize = 13.sp, modifier = Modifier.weight(0.4f))
+        Text(value, color = UiColors.TextPrimary, fontSize = 13.sp, modifier = Modifier.weight(0.6f), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+    }
+}
+
+private fun formatTradeValue(value: Any?): String {
+    return when (value) {
+        is Number -> {
+            val d = value.toDouble()
+            if (d > 0) String.format(java.util.Locale.US, "%.2f", d) else "-"
+        }
+        is String -> if (value.isNotBlank()) value else "-"
+        else -> "-"
     }
 }

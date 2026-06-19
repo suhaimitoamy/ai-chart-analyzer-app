@@ -46,11 +46,19 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
     private val _isAnalyzing = MutableStateFlow(false)
     val isAnalyzing = _isAnalyzing.asStateFlow()
 
+    private val _analysisResultJson = MutableStateFlow<String?>(null)
+    val analysisResultJson = _analysisResultJson.asStateFlow()
+
+    private val _analysisErrorText = MutableStateFlow<String?>(null)
+    val analysisErrorText = _analysisErrorText.asStateFlow()
+
     private val _botStatus = MutableStateFlow("Disconnected")
     val botStatus = _botStatus.asStateFlow()
 
     private val _logs = MutableStateFlow<List<String>>(emptyList())
     val logs = _logs.asStateFlow()
+
+    private var m1ClosedCount = 0
 
     init {
         viewModelScope.launch {
@@ -105,8 +113,6 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
              
             launch {
                 candleBuilder.candleClosed.collect { candle ->
-                    log("${candle.timeframe} candle real disimpan. O:${formatPrice(candle.open)} H:${formatPrice(candle.high)} L:${formatPrice(candle.low)} C:${formatPrice(candle.close)} Ticks:${candle.tickCount}")
-                    
                     val entity = CandleEntity(
                         time = candle.time,
                         symbol = candle.symbol,
@@ -120,6 +126,16 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
                         isClosed = candle.isClosed
                     )
                     db.candleDao().insert(entity)
+
+                    // Reduce terminal spam: skip M1 logs, only log M5+ or every 5th M1
+                    if (candle.timeframe != "M1") {
+                        log("${candle.timeframe} closed. C:${formatPrice(candle.close)} Ticks:${candle.tickCount}")
+                    } else {
+                        m1ClosedCount++
+                        if (m1ClosedCount % 5 == 0) {
+                            log("M1 #$m1ClosedCount closed. C:${formatPrice(candle.close)}")
+                        }
+                    }
                 }
             }
 
@@ -176,10 +192,13 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
     fun analyzeIct(timeframe: String, session: String, notes: String) {
         if (_isAnalyzing.value) return
         _isAnalyzing.value = true
+        _analysisResultJson.value = null
+        _analysisErrorText.value = null
         viewModelScope.launch {
             try {
                 if (settings.deepseekApiKey.isBlank()) {
-                    log("ICT Analysis Failed: DeepSeek API Key belum diisi.")
+                    _analysisErrorText.value = "DeepSeek API Key belum diisi. Buka Settings untuk mengisi API key."
+                    log("Analysis failed: API key kosong.")
                     return@launch
                 }
 
@@ -187,16 +206,26 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
                 val selectedTimeframe = normalizeTimeframe(timeframe)
                 val recentCandles = loadCandlesForAnalysis(selectedTimeframe)
                 if (recentCandles.isEmpty()) {
-                    log("ICT Analysis Failed: Candle real belum tersedia. Start bot dulu sampai candle M1 tersimpan.")
+                    _analysisErrorText.value = "Candle real belum tersedia. Start bot dulu di Settings sampai candle M1 tersimpan."
+                    log("Analysis failed: candle belum ada.")
                     return@launch
                 }
 
                 val prompt = buildIctPrompt(selectedTimeframe, session, notes, recentCandles)
                 val responseStr = aiClient.analyzeChart(prompt)
+
+                // Detect DeepSeek error responses before trying to parse JSON
+                if (responseStr.startsWith("DeepSeek API error") || responseStr.startsWith("Network error") || responseStr.startsWith("DeepSeek response") || responseStr.startsWith("DeepSeek API key kosong")) {
+                    _analysisErrorText.value = responseStr
+                    log("Analysis error. Lihat tab Analyze.")
+                    return@launch
+                }
+
                 val cleanJson = extractJsonObject(responseStr)
 
                 if (cleanJson == null) {
-                    log("ICT Analysis Failed: AI tidak mengembalikan JSON valid. Response: ${responseStr.take(120)}")
+                    _analysisErrorText.value = "AI tidak mengembalikan JSON valid.\nResponse: ${responseStr.take(200)}"
+                    log("Analysis failed: response bukan JSON.")
                     return@launch
                 }
 
@@ -213,9 +242,11 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
                     rawResult = cleanJson
                 )
                 db.ictAnalysisDao().insert(newAnalysis)
-                log("ICT Analysis saved. AI membaca ringkasan mapping lokal, bukan semua tick mentah.")
+                _analysisResultJson.value = cleanJson
+                log("ICT Analysis saved.")
             } catch (e: Exception) {
-                log("ICT Analysis Failed: ${e.message}")
+                _analysisErrorText.value = "Terjadi kesalahan: ${e.message}"
+                log("Analysis exception. Lihat tab Analyze.")
             } finally {
                 _isAnalyzing.value = false
             }
