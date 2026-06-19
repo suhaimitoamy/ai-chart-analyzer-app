@@ -359,7 +359,7 @@ Output wajib JSON valid saja, tanpa markdown, tanpa teks tambahan, dengan strukt
         val bias = calculateBias(recent)
         val choppy = isChoppy(recent)
         val atr = calculateAtr(recent)
-        val structure = buildStructureState(recent, swingHighs, swingLows, bias, nearestSupport, nearestResistance, atr, choppy)
+        val structure = buildStructureState(recent, swingHighs, swingLows, bias, nearestSupport, nearestResistance, choppy)
         val candlePack = recent.takeLast(20).joinToString(separator = "\n") { candle ->
             "${candle.time}: O=${formatPrice(candle.open)}, H=${formatPrice(candle.high)}, L=${formatPrice(candle.low)}, C=${formatPrice(candle.close)}, ticks=${candle.tickCount}"
         }
@@ -462,7 +462,6 @@ $candlePack
         bias: String,
         nearestSupport: Double?,
         nearestResistance: Double?,
-        atr: Double,
         choppy: Boolean
     ): Map<String, String> {
         val latest = candles.last()
@@ -527,8 +526,7 @@ $candlePack
             "break" to if (breakLevel != null) "$breakType at ${formatPrice(breakLevel)}" else breakType,
             "retest" to retest,
             "momentum" to momentum,
-            "liquidity" to liquidity,
-            "volatility" to if (atr > 15.0) "EXTREME" else "NORMAL"
+            "liquidity" to liquidity
         )
     }
 
