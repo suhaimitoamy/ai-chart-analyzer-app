@@ -7,6 +7,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import org.json.JSONObject
 import android.util.Log
+import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
@@ -34,11 +35,11 @@ class TwelveDataClient(private val apiKey: String) {
             override fun onMessage(webSocket: WebSocket, text: String) {
                 try {
                     val json = JSONObject(text)
-                    if (json.has("price")) { 
-                         _ticks.tryEmit(json)
+                    if (json.has("price")) {
+                        _ticks.tryEmit(json)
                     }
-                } catch(e: Exception) {
-                     Log.e("TwelveData", "Parse error", e)
+                } catch (e: Exception) {
+                    Log.e("TwelveData", "Parse error", e)
                 }
             }
 
@@ -58,53 +59,72 @@ class TwelveDataClient(private val apiKey: String) {
 
     suspend fun fetchHistoricalCandles(symbol: String, interval: String = "1min", outputSize: Int = 100): List<CandleEntity> {
         return withContext(Dispatchers.IO) {
-            val url = "https://api.twelvedata.com/time_series?symbol=${symbol.replace("/", "")}&interval=$interval&outputsize=$outputSize&apikey=$apiKey"
+            val encodedSymbol = URLEncoder.encode(symbol, "UTF-8")
+            val url = "https://api.twelvedata.com/time_series?symbol=$encodedSymbol&interval=$interval&outputsize=$outputSize&apikey=$apiKey"
             val request = Request.Builder().url(url).build()
             val candles = mutableListOf<CandleEntity>()
             val timeframe = intervalToTimeframe(interval)
             val seconds = timeframeToSeconds(timeframe)
-            try {
-                client.newCall(request).execute().use { response ->
-                    if (response.isSuccessful) {
-                        val bodyStr = response.body?.string()
-                        if (!bodyStr.isNullOrEmpty()) {
-                            val json = JSONObject(bodyStr)
-                            val values = json.optJSONArray("values")
-                            if (values != null) {
-                                val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                                sdf.timeZone = TimeZone.getTimeZone("UTC")
-                                for (i in 0 until values.length()) {
-                                    val item = values.getJSONObject(i)
-                                    val datetimeStr = item.getString("datetime")
-                                    val timeMs = sdf.parse(datetimeStr)?.time ?: 0L
-                                    val timeSec = timeMs / 1000
-                                    val open = item.getString("open").toDouble()
-                                    val high = item.getString("high").toDouble()
-                                    val low = item.getString("low").toDouble()
-                                    val close = item.getString("close").toDouble()
-                                    candles.add(CandleEntity(
-                                        time = timeSec,
-                                        symbol = symbol,
-                                        timeframe = timeframe,
-                                        open = open,
-                                        high = high,
-                                        low = low,
-                                        close = close,
-                                        tickCount = 1,
-                                        closeTime = timeSec + seconds - 1,
-                                        isClosed = true
-                                    ))
-                                }
-                            }
-                        }
-                    }
+
+            client.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    throw IllegalStateException("TwelveData HTTP ${response.code}: ${bodyStr.take(160)}")
                 }
-            } catch (e: Exception) {
-                Log.e("TwelveData", "Fetch historical error", e)
+                if (bodyStr.isBlank()) {
+                    throw IllegalStateException("TwelveData response kosong untuk $symbol $interval")
+                }
+
+                val json = JSONObject(bodyStr)
+                if (json.optString("status").equals("error", true) || json.has("code") && json.optJSONArray("values") == null) {
+                    val message = json.optString("message", bodyStr.take(160))
+                    throw IllegalStateException("TwelveData error: $message")
+                }
+
+                val values = json.optJSONArray("values")
+                    ?: throw IllegalStateException("TwelveData tidak mengirim values untuk $symbol $interval")
+
+                for (i in 0 until values.length()) {
+                    val item = values.getJSONObject(i)
+                    val datetimeStr = item.getString("datetime")
+                    val timeSec = parseDatetimeToSeconds(datetimeStr)
+                    val open = item.getString("open").toDouble()
+                    val high = item.getString("high").toDouble()
+                    val low = item.getString("low").toDouble()
+                    val close = item.getString("close").toDouble()
+                    candles.add(
+                        CandleEntity(
+                            time = timeSec,
+                            symbol = symbol,
+                            timeframe = timeframe,
+                            open = open,
+                            high = high,
+                            low = low,
+                            close = close,
+                            tickCount = 1,
+                            closeTime = timeSec + seconds - 1,
+                            isClosed = true
+                        )
+                    )
+                }
             }
-            // Twelve Data returns newest first. Reverse to get oldest first (chronological)
+
             candles.reversed()
         }
+    }
+
+    private fun parseDatetimeToSeconds(datetime: String): Long {
+        val timezone = TimeZone.getTimeZone("UTC")
+        val formats = listOf("yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd")
+        for (pattern in formats) {
+            try {
+                val sdf = SimpleDateFormat(pattern, Locale.US)
+                sdf.timeZone = timezone
+                return (sdf.parse(datetime)?.time ?: 0L) / 1000L
+            } catch (_: Exception) {
+            }
+        }
+        return System.currentTimeMillis() / 1000L
     }
 
     private fun intervalToTimeframe(interval: String): String {
@@ -112,9 +132,11 @@ class TwelveDataClient(private val apiKey: String) {
             "1min" -> "M1"
             "5min" -> "M5"
             "15min" -> "M15"
+            "30min" -> "M30"
             "1h" -> "H1"
             "4h" -> "H4"
             "1day" -> "D1"
+            "1week" -> "W1"
             else -> "M1"
         }
     }
@@ -124,9 +146,11 @@ class TwelveDataClient(private val apiKey: String) {
             "M1" -> 60L
             "M5" -> 300L
             "M15" -> 900L
+            "M30" -> 1800L
             "H1" -> 3600L
             "H4" -> 14400L
             "D1" -> 86400L
+            "W1" -> 604800L
             else -> 60L
         }
     }
