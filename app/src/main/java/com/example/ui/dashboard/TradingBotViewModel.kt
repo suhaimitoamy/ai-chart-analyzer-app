@@ -25,7 +25,6 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
     
     private var twelveClient: TwelveDataClient? = null
     private var aiClient = DeepSeekClient("")
-    private var aiClient = DeepSeekClient("")
     private val candleBuilder = CandleBuilder()
 
     val wallet: StateFlow<WalletEntity> = db.walletDao().getWallet()

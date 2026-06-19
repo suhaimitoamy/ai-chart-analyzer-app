@@ -852,7 +852,6 @@ fun SettingsTab(viewModel: TradingBotViewModel) {
             }
         }
     }
-    }
 }
 
 @Composable
