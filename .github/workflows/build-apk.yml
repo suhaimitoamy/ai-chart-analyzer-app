@@ -3,7 +3,7 @@ name: Android CI Build
 on:
   push:
     branches: [ "main", "master" ]
-  workflow_dispatch: # Memungkinkan build manual dari web GitHub
+  workflow_dispatch:
 
 jobs:
   build:
@@ -20,8 +20,19 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # Karena proyek ini belum memiliki file gradlew bawaan,
-      # kita generate wrapper-nya dulu secara otomatis di server GitHub
+      - name: Patch launcher resources
+        run: |
+          rm -f app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          rm -f app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
+          python3 - <<'PY'
+          from pathlib import Path
+          manifest = Path('app/src/main/AndroidManifest.xml')
+          text = manifest.read_text()
+          text = text.replace('android:icon="@mipmap/ic_launcher"', 'android:icon="@drawable/ic_launcher_xau"')
+          text = text.replace('android:roundIcon="@mipmap/ic_launcher_round"', 'android:roundIcon="@drawable/ic_launcher_xau"')
+          manifest.write_text(text)
+          PY
+
       - name: Generate Gradle Wrapper
         run: gradle wrapper
 
@@ -29,7 +40,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --no-configuration-cache --stacktrace
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
