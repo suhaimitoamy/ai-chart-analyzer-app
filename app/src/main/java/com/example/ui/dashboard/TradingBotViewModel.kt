@@ -254,7 +254,7 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
                 }
 
                 val json = JSONObject(cleanJson)
-                val currentPrice = json.optDouble("current_price", recentCandles.last().close)
+                val currentPrice = json.optDouble("current_price", ltfCandles.last().close)
                 val newAnalysis = IctAnalysisEntity(
                     timeframe = json.optString("timeframe", selectedTimeframe),
                     session = json.optString("session_context", session),
