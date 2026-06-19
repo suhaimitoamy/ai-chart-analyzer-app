@@ -184,11 +184,44 @@ class DeepSeekClient(private val apiKey: String) {
     if (viewModelFile.exists()) {
       val original = viewModelFile.readText()
       var patched = original
+        .replace("import com.example.data.network.CandleBuilder\nimport com.example.data.database.CandleEntity", "import com.example.data.network.CandleBuilder\nimport com.example.data.network.MarketEventScanner\nimport com.example.data.database.CandleEntity")
+        .replace("private var m1ClosedCount = 0", "private var m1ClosedCount = 0\n    private val emittedMarketEventKeys = mutableSetOf<String>()")
         .replace("\"M1\", \"M5\", \"M15\", \"H1\", \"H4\", \"D1\"", "\"M1\", \"M5\", \"M15\", \"M30\", \"H1\", \"H4\", \"D1\", \"W1\"")
         .replace("\"M15\" -> 900L\n            \"H1\"", "\"M15\" -> 900L\n            \"M30\" -> 1800L\n            \"H1\"")
         .replace("\"D1\" -> 86400L", "\"D1\" -> 86400L\n            \"W1\" -> 604800L")
         .replace("""4. Berikan setup hanya jika valid. Jika belum valid, tulis wait.""", """4. Berikan setup hanya jika valid. Jika belum valid, tulis wait.
 5. Sertakan market_structure, order_blocks, fvg, liquidity, premium_discount, trade_setup, key_notes, dan warnings.""")
+        .replace("""db.candleDao().insert(entity)
+
+                    if (candle.timeframe != "M1") {""", """db.candleDao().insert(entity)
+                    scanAndLogMarketEvents(candle.timeframe, candle.close)
+
+                    if (candle.timeframe != "M1") {""")
+        .replace("""log("Real CandleBuilder multi-timeframe aktif. AI hanya berjalan saat tombol Analisis ICT Sekarang diklik.")""", """log("Market Event Scanner aktif: BOS, MSS, CISD, liquidity, FVG, OB, OTE, session, dan displacement akan muncul di Terminal.")""")
+
+      if (!patched.contains("private suspend fun scanAndLogMarketEvents")) {
+        patched = patched.replace(
+          """    private suspend fun fetchAndSaveHistoricalCandles() {""",
+          """    private suspend fun scanAndLogMarketEvents(timeframe: String, latestPrice: Double) {
+        val target = normalizeTimeframe(timeframe)
+        if (target == "M1" && m1ClosedCount % 5 != 0) return
+        val recent = db.candleDao().getRecentCandles("XAU/USD", target, 180).reversed()
+        if (recent.size < 8) return
+        val events = MarketEventScanner.scan(target, recent, latestPrice)
+        events.filter { it.priority >= 78 }.forEach { event ->
+            if (emittedMarketEventKeys.add(event.key)) {
+                log("EVENT ${'$'}{event.text}")
+            }
+        }
+        if (emittedMarketEventKeys.size > 500) {
+            emittedMarketEventKeys.clear()
+            events.take(20).forEach { emittedMarketEventKeys.add(it.key) }
+        }
+    }
+
+    private suspend fun fetchAndSaveHistoricalCandles() {"""
+        )
+      }
 
       if (!patched.contains("\"order_blocks\"")) {
         val oldSchema = """
