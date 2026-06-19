@@ -101,11 +101,12 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
 
             log("Connecting to TwelveData WebSocket (XAU/USD)...")
             twelveClient?.connect("XAU/USD")
+            log("Real CandleBuilder aktif. AI hanya berjalan saat tombol Analisis ICT Sekarang diklik.")
              
-            // Listen for completed candles
+            // Listen for completed real candles
             launch {
                 candleBuilder.candleClosed.collect { candle ->
-                    log("Candle M1 Ditutup! Open: ${candle.open}, High: ${candle.high}, Low: ${candle.low}, Close: ${candle.close}, Ticks: ${candle.tickCount}")
+                    log("Candle M1 real disimpan. O:${formatPrice(candle.open)} H:${formatPrice(candle.high)} L:${formatPrice(candle.low)} C:${formatPrice(candle.close)} Ticks:${candle.tickCount}")
                     
                     val entity = CandleEntity(
                         time = candle.time,
@@ -127,8 +128,8 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
                     val priceStr = tick.optString("price")
                     val price = priceStr.toDoubleOrNull()
                     val timestamp = tick.optLong("timestamp", System.currentTimeMillis() / 1000)
-                    if (price != null) {
-                        // Feed the CandleBuilder
+                    if (price != null && isValidXauPrice(price)) {
+                        // Feed real tick into CandleBuilder only
                         candleBuilder.processTick(price, timestamp)
                         
                         val currentTime = System.currentTimeMillis()
@@ -157,51 +158,6 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
                     }
                 }
             }
-            
-
-            // Autonomous Background Scanner Simulation
-            launch {
-                log("Starting Autonomous Market Scanner...")
-                var step = 0
-                while (_botStatus.value == "Running") {
-                    kotlinx.coroutines.delay(10_000) // Delay for 10 seconds for demo purposes
-                    step = (step + 1) % 5
-                    when (step) {
-                        1 -> {
-                            log("🔍 [AUTONOMOUS SCAN] XAUUSD M15\nHarga menyentuh zona Retail Liquidity/IDM di 2030.50. Menunggu konfirmasi Change of Character (CHoCH) untuk entry...")
-                            log("Autonomous step: Sweep Liquidity")
-                        }
-                        2 -> {
-                            log("✅ [MARKET STRUCTURE SHIFT]\nCHoCH Bullish terkonfirmasi di XAUUSD M15. Fair Value Gap (FVG) terbentuk di 2032.00 - 2033.50. Mempersiapkan pending order Buy Limit.")
-                            log("Autonomous step: CHoCH Confirmed")
-                        }
-                        3 -> {
-                            val signalMessage = """
-                                🤖 ATA AUTONOMOUS EXECUTION
-                                
-                                🟢 XAUUSD BUY LIMIT TRIGGERED
-                                Harga Entry: 2033.00 (Mitigasi Order Block)
-                                SL: 2030.00
-                                TP1: 2038.00
-                                TP2: 2042.00
-                                
-                                Konteks: Harga baru saja memitigasi demand zone M15 (Order Block). Bot sekarang dalam posisi aktif.
-                            """.trimIndent()
-                            log(signalMessage)
-                            log("Autonomous step: Order Triggered")
-                        }
-                        4 -> {
-                            log("🔔 [UPDATE POSISI]\nXAUUSD bergerak impulsif naik mem-break resisten lokal. Profit berjalan +25 pips (2035.50). Agent otomatis memindahkan Stop Loss ke Breakeven (Entry Price) untuk perlindungan modal.")
-                            log("Autonomous step: SL to BE")
-                        }
-                        0 -> {
-                            log("🎯 [TAKE PROFIT HIT]\nXAUUSD otomatis ditutup. Harga break 2038.00 (TP1 Hit!).\nWin rate total sementara naik sebesar +0.4%. Mengkalkulasi setup berikutnya...")
-                            log("Autonomous step: TP Hit")
-                            kotlinx.coroutines.delay(15_000) // Wait a bit longer before repeating
-                        }
-                    }
-                }
-            }
         }
     }
     
@@ -222,41 +178,41 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
         _isAnalyzing.value = true
         viewModelScope.launch {
             try {
-                val prompt = """
-Kamu adalah ICT (Inner Circle Trader) expert analyst profesional khusus XAUUSD (Gold/USD).
-Lakukan analisis ICT mendalam berdasarkan data berikut:
-- Timeframe: $timeframe
-- Session: $session
-${if (notes.isNotEmpty()) "- Catatan trader: $notes" else ""}
+                if (settings.deepseekApiKey.isBlank()) {
+                    log("ICT Analysis Failed: DeepSeek API Key belum diisi.")
+                    return@launch
+                }
 
-Berikan output murni format JSON tanpa embel-embel markdown dengan struktur:
-{
-  "bias": "BULLISH" atau "BEARISH" atau "NEUTRAL",
-  "confidence_score": 85,
-  "timeframe": "$timeframe",
-  "session_context": "$session",
-  "current_price": 2035.50,
-  "daily_bias_summary": "Ringkasan bias",
-  "trade_setup": { "entry_zone": "2030-2032", "tp1": 2038, "tp2": 2042, "stop_loss": 2028, "risk_reward": "1:3" },
-  "market_structure": { "trend": "Bullish" }
-}
-""".trimIndent()
-                val responseStr = aiClient?.analyzeChart(prompt) ?: "{}"
-                
-                // Coba bersihkan markdown json jika ada
-                val cleanJson = responseStr.replace("```json", "").replace("```", "").trim()
+                aiClient = DeepSeekClient(settings.deepseekApiKey)
+                val recentCandles = db.candleDao().getRecentCandles("XAU/USD", 120).reversed()
+                if (recentCandles.isEmpty()) {
+                    log("ICT Analysis Failed: Candle real belum tersedia. Start bot dulu sampai candle M1 tersimpan.")
+                    return@launch
+                }
+
+                val prompt = buildIctPrompt(timeframe, session, notes, recentCandles)
+                val responseStr = aiClient.analyzeChart(prompt)
+                val cleanJson = extractJsonObject(responseStr)
+
+                if (cleanJson == null) {
+                    log("ICT Analysis Failed: AI tidak mengembalikan JSON valid. Response: ${responseStr.take(120)}")
+                    return@launch
+                }
+
                 val json = JSONObject(cleanJson)
+                val currentPrice = json.optDouble("current_price", recentCandles.last().close)
                 
                 val newAnalysis = com.example.data.database.IctAnalysisEntity(
                     timeframe = json.optString("timeframe", timeframe),
                     session = json.optString("session_context", session),
                     bias = json.optString("bias", "NEUTRAL"),
                     confidence = json.optInt("confidence_score", 0),
-                    price = "$${json.optDouble("current_price", 0.0)}",
+                    price = "$${formatPrice(currentPrice)}",
                     date = java.text.SimpleDateFormat("dd MMM yyyy, HH.mm", java.util.Locale.getDefault()).format(java.util.Date()),
                     rawResult = cleanJson
                 )
                 db.ictAnalysisDao().insert(newAnalysis)
+                log("ICT Analysis saved. AI hanya membaca ringkasan candle lokal, bukan semua tick mentah.")
             } catch (e: Exception) {
                 log("ICT Analysis Failed: ${e.message}")
             } finally {
@@ -276,38 +232,9 @@ Berikan output murni format JSON tanpa embel-embel markdown dengan struktur:
                     lineCount = lines.count()
                 }
                 
-                // Local Summarization Logic (Compression)
-                val summaryData = "Ringkasan: $lineCount candle dikompres menjadi 4 fase struktur pasar utama. " +
-                        "1. Akumulasi di area Support (2015-2020), 2. Ekspansi Bullish dengan FVG (2020-2040), " +
-                        "3. Distribusi di area Resisten (2040-2045), 4. Retrace / Markdown (Sweep Liquidity di 2025). " +
-                        "Total Setup SMC Valid: 18. Hit SL: 6. Hit TP: 12. Local Win Rate: 66.6%."
-
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    log("Parsed $lineCount lines of candlestick data from ${uri.lastPathSegment}.")
-                    log("TA Local Engine memproses/meringkas data untuk menghemat token DeepSeek...")
-                    log("Local Summary: $summaryData")
-                }
-                
-                val prompt = "Sebagai AI Trainer, ini adalah ringkasan backtest data otomatis dari TA Local Engine:\n$summaryData\nAnalisa ringkasan pola ini untuk optimalisasi rule SMC + ICT. Cari kelemahan (kenapa 6 hit SL) dan perbaiki Win Rate menjadi target 75%. Berikan saran singkat buffer ATR dan filter sesi trading."
-                val analysis = aiClient.analyzeChart(prompt)
-                
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    val aiResultMsg = """
-                        🧠 AI TRAINER RESULT (Local Saved)
-                        File: ${uri.lastPathSegment} ($lineCount candles processed)
-                        Signal: #50 BUY
-                        Result: LOSS
-                        Pattern: METHOD_PATTERN_COMPRESS_BULL
-                        Reward: +0.0 | Penalty: -4.0
-                        Pattern score: 348.0
-                        Local Lesson: 
-                        METHOD_PATTERN_COMPRESS_BULL BUY kena SL; beri penalty dan minta konfirmasi BREAK/ close yang lebih kuat pada pola serupa.
-                        
-                        [INFO] Proses AI Trainer & Brain Draft sedang berjalan di background (Timeout 180s).
-                    """.trimIndent()
-                    
-                    log(aiResultMsg)
-                    log("Backtest Complete. Optimized methods. Sent Result to Terminal")
+                    log("Parsed $lineCount lines from ${uri.lastPathSegment}.")
+                    log("AI tidak dipanggil otomatis dari upload file. Klik Analisis ICT Sekarang untuk menjalankan AI manual.")
                 }
             } catch (e: Exception) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -315,6 +242,155 @@ Berikan output murni format JSON tanpa embel-embel markdown dengan struktur:
                 }
             }
         }
+    }
+
+    private fun buildIctPrompt(
+        timeframe: String,
+        session: String,
+        notes: String,
+        candles: List<CandleEntity>
+    ): String {
+        val marketSnapshot = buildLocalMarketSnapshot(candles, timeframe, session)
+        return """
+Kamu adalah ICT (Inner Circle Trader) expert analyst profesional khusus XAUUSD (Gold/USD).
+
+AI hanya menerima ringkasan dari Local Engine agar token ringan. Jangan minta data tambahan.
+Gunakan ringkasan candle real berikut untuk mapping chart:
+
+$marketSnapshot
+
+${if (notes.isNotEmpty()) "Catatan trader: $notes" else "Catatan trader: -"}
+
+Tugas:
+1. Tentukan bias: BULLISH, BEARISH, atau NEUTRAL.
+2. Jelaskan struktur market secara ringkas.
+3. Tentukan zona penting: liquidity, FVG, order block, premium/discount.
+4. Berikan setup hanya jika valid. Jika belum valid, tulis wait.
+
+Output wajib JSON valid saja, tanpa markdown, tanpa teks tambahan, dengan struktur:
+{
+  "bias": "BULLISH/BEARISH/NEUTRAL",
+  "confidence_score": 0,
+  "timeframe": "$timeframe",
+  "session_context": "$session",
+  "current_price": 0.0,
+  "daily_bias_summary": "ringkasan",
+  "trade_setup": {
+    "status": "valid/wait",
+    "entry_zone": "area harga",
+    "tp1": 0.0,
+    "tp2": 0.0,
+    "stop_loss": 0.0,
+    "risk_reward": "rasio"
+  },
+  "market_structure": {
+    "trend": "Bullish/Bearish/Range",
+    "liquidity": "ringkasan",
+    "fvg": "ringkasan",
+    "order_block": "ringkasan",
+    "premium_discount": "ringkasan"
+  }
+}
+""".trimIndent()
+    }
+
+    private fun buildLocalMarketSnapshot(
+        candles: List<CandleEntity>,
+        timeframe: String,
+        session: String
+    ): String {
+        val recent = candles.takeLast(60)
+        val latest = recent.last()
+        val previous = recent.dropLast(1)
+        val last20 = previous.takeLast(20)
+        val high20 = last20.maxOfOrNull { it.high } ?: latest.high
+        val low20 = last20.minOfOrNull { it.low } ?: latest.low
+        val high60 = recent.maxOf { it.high }
+        val low60 = recent.minOf { it.low }
+        val equilibrium = (high60 + low60) / 2.0
+        val premiumDiscount = when {
+            latest.close > equilibrium -> "Premium"
+            latest.close < equilibrium -> "Discount"
+            else -> "Equilibrium"
+        }
+
+        val close5 = recent.takeLast(5).map { it.close }.average()
+        val close20 = recent.takeLast(20).map { it.close }.average()
+        val localTrend = when {
+            close5 > close20 -> "Bullish short-term"
+            close5 < close20 -> "Bearish short-term"
+            else -> "Range"
+        }
+
+        val liquidity = when {
+            latest.high > high20 && latest.close < high20 -> "Buy-side liquidity swept near ${formatPrice(high20)}"
+            latest.low < low20 && latest.close > low20 -> "Sell-side liquidity swept near ${formatPrice(low20)}"
+            else -> "No fresh liquidity sweep on latest closed candle"
+        }
+
+        val candlePack = recent.takeLast(20).joinToString(separator = "\n") { candle ->
+            "${candle.time}: O=${formatPrice(candle.open)}, H=${formatPrice(candle.high)}, L=${formatPrice(candle.low)}, C=${formatPrice(candle.close)}, ticks=${candle.tickCount}"
+        }
+
+        return """
+Symbol: XAU/USD
+Requested timeframe: $timeframe
+Session: $session
+Closed candles used: ${recent.size}
+Current price: ${formatPrice(latest.close)}
+Local trend: $localTrend
+Last 20 swing high: ${formatPrice(high20)}
+Last 20 swing low: ${formatPrice(low20)}
+60 candle range high: ${formatPrice(high60)}
+60 candle range low: ${formatPrice(low60)}
+Equilibrium: ${formatPrice(equilibrium)}
+Current zone: $premiumDiscount
+Liquidity: $liquidity
+FVG: ${findLatestFvg(recent)}
+Order block reference: ${findOrderBlockReference(recent)}
+
+Last 20 closed candles:
+$candlePack
+""".trimIndent()
+    }
+
+    private fun findLatestFvg(candles: List<CandleEntity>): String {
+        if (candles.size < 3) return "Not enough candles"
+        for (i in candles.size - 1 downTo 2) {
+            val left = candles[i - 2]
+            val right = candles[i]
+            if (left.high < right.low) {
+                return "Bullish FVG ${formatPrice(left.high)} - ${formatPrice(right.low)}"
+            }
+            if (left.low > right.high) {
+                return "Bearish FVG ${formatPrice(right.high)} - ${formatPrice(left.low)}"
+            }
+        }
+        return "No clear FVG in recent candles"
+    }
+
+    private fun findOrderBlockReference(candles: List<CandleEntity>): String {
+        val recent = candles.takeLast(20)
+        val bullishOb = recent.lastOrNull { it.close < it.open }
+        val bearishOb = recent.lastOrNull { it.close > it.open }
+        val bullishText = bullishOb?.let { "Bullish OB ref ${formatPrice(it.low)} - ${formatPrice(it.high)}" } ?: "Bullish OB not found"
+        val bearishText = bearishOb?.let { "Bearish OB ref ${formatPrice(it.low)} - ${formatPrice(it.high)}" } ?: "Bearish OB not found"
+        return "$bullishText | $bearishText"
+    }
+
+    private fun extractJsonObject(raw: String): String? {
+        val cleaned = raw.replace("```json", "").replace("```", "").trim()
+        val start = cleaned.indexOf('{')
+        val end = cleaned.lastIndexOf('}')
+        return if (start >= 0 && end > start) cleaned.substring(start, end + 1) else null
+    }
+
+    private fun isValidXauPrice(price: Double): Boolean {
+        return price in 1000.0..5000.0
+    }
+
+    private fun formatPrice(value: Double): String {
+        return String.format(java.util.Locale.US, "%.2f", value)
     }
 
     fun generatePdfReport(context: android.content.Context) {
