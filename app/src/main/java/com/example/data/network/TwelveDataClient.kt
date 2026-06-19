@@ -61,6 +61,8 @@ class TwelveDataClient(private val apiKey: String) {
             val url = "https://api.twelvedata.com/time_series?symbol=${symbol.replace("/", "")}&interval=$interval&outputsize=$outputSize&apikey=$apiKey"
             val request = Request.Builder().url(url).build()
             val candles = mutableListOf<CandleEntity>()
+            val timeframe = intervalToTimeframe(interval)
+            val seconds = timeframeToSeconds(timeframe)
             try {
                 client.newCall(request).execute().use { response ->
                     if (response.isSuccessful) {
@@ -75,18 +77,22 @@ class TwelveDataClient(private val apiKey: String) {
                                     val item = values.getJSONObject(i)
                                     val datetimeStr = item.getString("datetime")
                                     val timeMs = sdf.parse(datetimeStr)?.time ?: 0L
+                                    val timeSec = timeMs / 1000
                                     val open = item.getString("open").toDouble()
                                     val high = item.getString("high").toDouble()
                                     val low = item.getString("low").toDouble()
                                     val close = item.getString("close").toDouble()
                                     candles.add(CandleEntity(
-                                        time = timeMs / 1000,
+                                        time = timeSec,
                                         symbol = symbol,
+                                        timeframe = timeframe,
                                         open = open,
                                         high = high,
                                         low = low,
                                         close = close,
-                                        tickCount = 1 // default for history
+                                        tickCount = 1,
+                                        closeTime = timeSec + seconds - 1,
+                                        isClosed = true
                                     ))
                                 }
                             }
@@ -98,6 +104,30 @@ class TwelveDataClient(private val apiKey: String) {
             }
             // Twelve Data returns newest first. Reverse to get oldest first (chronological)
             candles.reversed()
+        }
+    }
+
+    private fun intervalToTimeframe(interval: String): String {
+        return when (interval.lowercase(Locale.US)) {
+            "1min" -> "M1"
+            "5min" -> "M5"
+            "15min" -> "M15"
+            "1h" -> "H1"
+            "4h" -> "H4"
+            "1day" -> "D1"
+            else -> "M1"
+        }
+    }
+
+    private fun timeframeToSeconds(timeframe: String): Long {
+        return when (timeframe.uppercase(Locale.US)) {
+            "M1" -> 60L
+            "M5" -> 300L
+            "M15" -> 900L
+            "H1" -> 3600L
+            "H4" -> 14400L
+            "D1" -> 86400L
+            else -> 60L
         }
     }
 }
