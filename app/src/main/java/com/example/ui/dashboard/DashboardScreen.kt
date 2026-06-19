@@ -62,6 +62,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.data.network.MarketPriceCache
 import kotlinx.coroutines.delay
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -89,7 +90,12 @@ data class ConceptInfo(val title: String, val icon: String, val status: String, 
 @Composable
 fun rememberLiveClock(): Long {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) { while (true) { now = System.currentTimeMillis(); delay(1000) } }
+    LaunchedEffect(Unit) {
+        while (true) {
+            now = System.currentTimeMillis()
+            delay(1000)
+        }
+    }
     return now
 }
 
@@ -119,7 +125,7 @@ fun DashboardScreen(viewModel: TradingBotViewModel = viewModel()) {
             TopBar()
             HorizontalDivider(color = UiColors.SurfaceLight)
             when (currentTab) {
-                "Dashboard" -> DashboardTab(viewModel, session, now, onNavigateAnalyze = { currentTab = "Analyze" })
+                "Dashboard" -> DashboardTab(viewModel, session, now) { currentTab = "Analyze" }
                 "Analyze" -> AnalyzeTab(viewModel, session)
                 "Journal" -> JournalTab(viewModel)
                 "Terminal" -> TerminalTab(viewModel)
@@ -159,8 +165,6 @@ fun TopBar() {
     }
 }
 
-// ─────────────── DASHBOARD TAB ───────────────
-
 @Composable
 fun DashboardTab(viewModel: TradingBotViewModel, session: SessionInfo, now: Long, onNavigateAnalyze: () -> Unit) {
     val analyses by viewModel.ictAnalyses.collectAsState()
@@ -168,10 +172,11 @@ fun DashboardTab(viewModel: TradingBotViewModel, session: SessionInfo, now: Long
     val json = latest?.rawResult?.let { parseJson(it) }
     val concepts = buildConcepts(json, latest?.timeframe ?: "-", session)
     val activeConcepts = concepts.count { it.status == "ACTIVE" }
+    val liveGoldPrice = MarketPriceCache.latestPrice ?: latest?.price?.replace("$", "")?.toDoubleOrNull() ?: 0.0
 
     LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Spacer(Modifier.height(4.dp)) }
-        item { HeaderMarketCard(session, now) }
+        item { HeaderMarketCard(session, now, liveGoldPrice) }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 MetricCard(Modifier.weight(1f), analyses.size.toString(), "Analyses", UiColors.PrimaryYellow)
@@ -179,9 +184,7 @@ fun DashboardTab(viewModel: TradingBotViewModel, session: SessionInfo, now: Long
                 MetricCard(Modifier.weight(1f), analyses.count { it.bias.equals("BEARISH", true) }.toString(), "Bearish", UiColors.BearishRed)
             }
         }
-        item {
-            ActionCard("Analisis ICT Sekarang", "Rule engine membaca candle real-time dan market events", Icons.Default.FlashOn) { onNavigateAnalyze() }
-        }
+        item { ActionCard("Analisis ICT Sekarang", "Rule engine membaca candle real-time dan market events", Icons.Default.FlashOn) { onNavigateAnalyze() } }
         item { SessionsCard(session, now) }
         item { ConceptsCoveredCard(concepts, activeConcepts) }
         item { RecentAnalysesCard(analyses.take(5)) }
@@ -190,32 +193,45 @@ fun DashboardTab(viewModel: TradingBotViewModel, session: SessionInfo, now: Long
 }
 
 @Composable
-fun HeaderMarketCard(session: SessionInfo, now: Long) {
-    val utcText = SimpleDateFormat("HH:mm:ss", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(now))
-    Column(modifier = Modifier.fillMaxWidth().background(UiColors.Surface, RoundedCornerShape(14.dp)).padding(16.dp)) {
+fun HeaderMarketCard(session: SessionInfo, now: Long, liveGoldPrice: Double) {
+    val wibText = SimpleDateFormat("HH:mm:ss", Locale.US).apply { timeZone = TimeZone.getTimeZone("Asia/Jakarta") }.format(Date(now))
+    val dateText = SimpleDateFormat("EEE, dd MMM yyyy", Locale("id", "ID")).apply { timeZone = TimeZone.getTimeZone("Asia/Jakarta") }.format(Date(now))
+    Column(modifier = Modifier.fillMaxWidth().background(UiColors.Surface, RoundedCornerShape(16.dp)).border(1.dp, UiColors.SurfaceLight, RoundedCornerShape(16.dp)).padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("INNER CIRCLE TRADER ", color = UiColors.PrimaryYellow, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
             Box(Modifier.size(4.dp).background(UiColors.PrimaryYellow, CircleShape))
         }
-        Spacer(Modifier.height(6.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Row {
-                Text("XAU", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = UiColors.TextPrimary)
-                Text("/", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = UiColors.PrimaryYellow)
-                Text("USD", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = UiColors.TextPrimary)
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row {
+                    Text("XAU", fontSize = 25.sp, fontWeight = FontWeight.Bold, color = UiColors.TextPrimary)
+                    Text("/", fontSize = 25.sp, fontWeight = FontWeight.Bold, color = UiColors.PrimaryYellow)
+                    Text("USD", fontSize = 25.sp, fontWeight = FontWeight.Bold, color = UiColors.TextPrimary)
+                }
+                Spacer(Modifier.height(8.dp))
+                Text("WIB Time", fontSize = 11.sp, color = UiColors.TextSecondary)
+                Text(wibText, fontSize = 21.sp, fontWeight = FontWeight.Bold, color = UiColors.TextPrimary, fontFamily = FontFamily.Monospace)
+                Text(dateText, fontSize = 11.sp, color = UiColors.TextSecondary)
             }
-            Column(horizontalAlignment = Alignment.End) {
-                Text("UTC Time", fontSize = 11.sp, color = UiColors.TextSecondary)
-                Text(utcText, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = UiColors.TextPrimary, fontFamily = FontFamily.Monospace)
-                Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(horizontalAlignment = Alignment.End, modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(6.dp).background(UiColors.BullishGreen, CircleShape))
+                    Spacer(Modifier.width(5.dp))
+                    Text("Gold Price", fontSize = 11.sp, color = UiColors.TextSecondary)
+                }
+                Text(if (liveGoldPrice > 0.0) "$${String.format(Locale.US, "%.2f", liveGoldPrice)}" else "Waiting...", color = UiColors.TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                Text("Real-time XAU/USD", color = UiColors.BullishGreen, fontSize = 11.sp, maxLines = 1)
+                Spacer(Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(6.dp).background(if (session.active) UiColors.BullishGreen else UiColors.TextSecondary, CircleShape))
                     Spacer(Modifier.width(4.dp))
-                    Text(session.name, fontSize = 11.sp, color = if (session.active) UiColors.BullishGreen else UiColors.TextSecondary)
+                    Text(session.name, fontSize = 11.sp, color = if (session.active) UiColors.BullishGreen else UiColors.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(10.dp))
         Text("Smart Money Concept • ICT Methodology", fontSize = 12.sp, color = UiColors.TextSecondary)
     }
 }
@@ -230,8 +246,8 @@ fun SessionsCard(session: SessionInfo, now: Long) {
             Text("Trading Sessions Auto DST", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = UiColors.TextPrimary)
         }
         Spacer(Modifier.height(10.dp))
-        rows.forEachIndexed { index, it ->
-            SessionRowAuto(it.name, it.utcRange, it.wibRange, it.name == session.name && session.active)
+        rows.forEachIndexed { index, row ->
+            SessionRowAuto(row.name, row.utcRange, row.wibRange, row.name == session.name && session.active)
             if (index < rows.lastIndex) HorizontalDivider(color = UiColors.SurfaceLight, modifier = Modifier.padding(vertical = 8.dp))
         }
     }
@@ -256,15 +272,12 @@ fun ConceptsCoveredCard(concepts: List<ConceptInfo>, activeCount: Int) {
     }
 }
 
-// ─────────────── ANALYZE TAB ───────────────
-
 @Composable
 fun AnalyzeTab(viewModel: TradingBotViewModel, session: SessionInfo) {
     var selectedTimeframe by remember { mutableStateOf("M5") }
     val isAnalyzing by viewModel.isAnalyzing.collectAsState()
     val result by viewModel.analysisResultJson.collectAsState()
     val error by viewModel.analysisErrorText.collectAsState()
-
     LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { Spacer(Modifier.height(4.dp)) }
         item {
@@ -277,21 +290,13 @@ fun AnalyzeTab(viewModel: TradingBotViewModel, session: SessionInfo) {
                 Text("TIMEFRAME", color = UiColors.TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(10.dp))
                 listOf("M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1").chunked(5).forEach { row ->
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        row.forEach { tf -> TimeframeChip(tf, selectedTimeframe == tf) { selectedTimeframe = tf } }
-                    }
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { row.forEach { tf -> TimeframeChip(tf, selectedTimeframe == tf) { selectedTimeframe = tf } } }
                     Spacer(Modifier.height(6.dp))
                 }
                 Spacer(Modifier.height(10.dp))
                 AutoSessionBox(session)
                 Spacer(Modifier.height(14.dp))
-                Button(
-                    onClick = { viewModel.analyzeIct(selectedTimeframe, session.name, "") },
-                    enabled = !isAnalyzing,
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = UiColors.PrimaryYellow, contentColor = Color.Black, disabledContainerColor = UiColors.SurfaceLight),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
+                Button(onClick = { viewModel.analyzeIct(selectedTimeframe, session.name, "") }, enabled = !isAnalyzing, modifier = Modifier.fillMaxWidth().height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = UiColors.PrimaryYellow, contentColor = Color.Black, disabledContainerColor = UiColors.SurfaceLight), shape = RoundedCornerShape(12.dp)) {
                     if (isAnalyzing) { CircularProgressIndicator(Modifier.size(20.dp), color = UiColors.TextSecondary); Spacer(Modifier.width(8.dp)); Text("Menganalisis...") }
                     else { Icon(Icons.Default.FlashOn, null); Spacer(Modifier.width(8.dp)); Text("Analisis ICT Sekarang", fontWeight = FontWeight.Bold) }
                 }
@@ -303,8 +308,6 @@ fun AnalyzeTab(viewModel: TradingBotViewModel, session: SessionInfo) {
     }
 }
 
-// ─────────────── HISTORY TRADE TAB ───────────────
-
 @Composable
 fun JournalTab(viewModel: TradingBotViewModel) {
     val trades by viewModel.trades.collectAsState()
@@ -315,25 +318,12 @@ fun JournalTab(viewModel: TradingBotViewModel) {
             Text("Riwayat TP / SL XAUUSD", color = UiColors.TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Text("Trade masuk setelah terminal notifikasi TP atau SL.", color = UiColors.TextSecondary, fontSize = 13.sp)
         }
-        item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MetricCard(Modifier.weight(1f), trades.size.toString(), "Total", UiColors.PrimaryYellow)
-                MetricCard(Modifier.weight(1f), trades.count { it.result == "WIN" }.toString(), "TP", UiColors.BullishGreen)
-                MetricCard(Modifier.weight(1f), trades.count { it.result == "LOSS" }.toString(), "SL", UiColors.BearishRed)
-            }
-        }
-        if (trades.isEmpty()) {
-            item { EmptyCard("Belum ada trade selesai. Setup harus ACTIVE lalu menyentuh TP/SL dulu.") }
-        } else {
-            items(trades, key = { it.id }) { trade ->
-                TradeHistoryCard(trade.type, trade.result, trade.entryPrice, trade.takeProfit, trade.stopLoss, trade.timestamp)
-            }
-        }
+        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) { MetricCard(Modifier.weight(1f), trades.size.toString(), "Total", UiColors.PrimaryYellow); MetricCard(Modifier.weight(1f), trades.count { it.result == "WIN" }.toString(), "TP", UiColors.BullishGreen); MetricCard(Modifier.weight(1f), trades.count { it.result == "LOSS" }.toString(), "SL", UiColors.BearishRed) } }
+        if (trades.isEmpty()) item { EmptyCard("Belum ada trade selesai. Setup harus ACTIVE lalu menyentuh TP/SL dulu.") }
+        else items(trades, key = { it.id }) { trade -> TradeHistoryCard(trade.type, trade.result, trade.entryPrice, trade.takeProfit, trade.stopLoss, trade.timestamp) }
         item { Spacer(Modifier.height(16.dp)) }
     }
 }
-
-// ─────────────── MARKET EVENT FEED (TERMINAL) ───────────────
 
 @Composable
 fun TerminalTab(viewModel: TradingBotViewModel) {
@@ -347,11 +337,7 @@ fun TerminalTab(viewModel: TradingBotViewModel) {
             }
             HorizontalDivider(color = UiColors.SurfaceLight, modifier = Modifier.padding(bottom = 8.dp))
         }
-        items(logs, key = { "$it-${logs.indexOf(it)}" }) { log ->
-            val color = eventColor(log)
-            val prefix = eventPrefix(log)
-            Text("$prefix $log", color = color, fontSize = 12.sp, lineHeight = 18.sp, fontFamily = FontFamily.Monospace, maxLines = 3, overflow = TextOverflow.Ellipsis)
-        }
+        items(logs, key = { "$it-${logs.indexOf(it)}" }) { log -> Text("${eventPrefix(log)} $log", color = eventColor(log), fontSize = 12.sp, lineHeight = 18.sp, fontFamily = FontFamily.Monospace, maxLines = 3, overflow = TextOverflow.Ellipsis) }
     }
 }
 
@@ -394,25 +380,17 @@ fun eventPrefix(log: String): String {
     }
 }
 
-// ─────────────── SETTINGS TAB ───────────────
-
 @Composable
 fun SettingsTab(viewModel: TradingBotViewModel) {
     var twelve by remember { mutableStateOf(viewModel.settings.twelveApiKey) }
-    var deepseek by remember { mutableStateOf(viewModel.settings.deepseekApiKey.takeIf { it != "LOCAL_RULE_ENGINE" } ?: "") }
+    var deepseek by remember { mutableStateOf(viewModel.settings.deepSeekApiKey.takeIf { it != "LOCAL_RULE_ENGINE" } ?: "") }
     LazyColumn(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { Text("API Keys Configuration", color = UiColors.PrimaryYellow, fontSize = 22.sp, fontWeight = FontWeight.Bold) }
         item { ApiField("Twelve Data API Key", twelve) { twelve = it } }
         item { ApiField("DeepSeek API Key (opsional)", deepseek) { deepseek = it } }
-        item {
-            Button(onClick = { viewModel.saveKeys(twelve, deepseek); viewModel.startBot() }, modifier = Modifier.fillMaxWidth().height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = UiColors.PrimaryYellow, contentColor = Color.Black), shape = RoundedCornerShape(12.dp)) {
-                Icon(Icons.Default.Save, null); Spacer(Modifier.width(8.dp)); Text(if (viewModel.settings.areKeysSet()) "API Keys Tersimpan" else "Simpan API Keys", fontWeight = FontWeight.Bold)
-            }
-        }
+        item { Button(onClick = { viewModel.saveKeys(twelve, deepseek); viewModel.startBot() }, modifier = Modifier.fillMaxWidth().height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = UiColors.PrimaryYellow, contentColor = Color.Black), shape = RoundedCornerShape(12.dp)) { Icon(Icons.Default.Save, null); Spacer(Modifier.width(8.dp)); Text(if (viewModel.settings.areKeysSet()) "API Keys Tersimpan" else "Simpan API Keys", fontWeight = FontWeight.Bold) } }
     }
 }
-
-// ─────────────── SHARED COMPONENTS ───────────────
 
 @Composable
 fun ApiField(label: String, value: String, onChange: (String) -> Unit) {
@@ -421,9 +399,7 @@ fun ApiField(label: String, value: String, onChange: (String) -> Unit) {
 
 @Composable
 fun TimeframeChip(tf: String, selected: Boolean, onClick: () -> Unit) {
-    Box(Modifier.clip(RoundedCornerShape(8.dp)).background(if (selected) UiColors.PrimaryYellow else UiColors.SurfaceLight).clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 8.dp), contentAlignment = Alignment.Center) {
-        Text(tf, color = if (selected) Color.Black else UiColors.TextSecondary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-    }
+    Box(Modifier.clip(RoundedCornerShape(8.dp)).background(if (selected) UiColors.PrimaryYellow else UiColors.SurfaceLight).clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 8.dp), contentAlignment = Alignment.Center) { Text(tf, color = if (selected) Color.Black else UiColors.TextSecondary, fontWeight = FontWeight.Bold, fontSize = 13.sp) }
 }
 
 @Composable
@@ -431,10 +407,7 @@ fun AutoSessionBox(session: SessionInfo) {
     Column(Modifier.fillMaxWidth().border(1.dp, UiColors.SurfaceLight, RoundedCornerShape(8.dp)).padding(12.dp)) {
         Text("AUTO SESSION", color = UiColors.TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(4.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(session.name, color = if (session.active) UiColors.BullishGreen else UiColors.TextSecondary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-            Text(session.utcRange, color = UiColors.TextSecondary, fontSize = 12.sp)
-        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(session.name, color = if (session.active) UiColors.BullishGreen else UiColors.TextSecondary, fontWeight = FontWeight.Bold, fontSize = 13.sp); Text(session.utcRange, color = UiColors.TextSecondary, fontSize = 12.sp) }
         Text("WIB: ${session.wibRange}", color = UiColors.TextSecondary, fontSize = 11.sp)
     }
 }
@@ -451,10 +424,7 @@ fun AnalysisResultCard(raw: String) {
     Column(Modifier.fillMaxWidth().background(UiColors.Surface, RoundedCornerShape(14.dp)).border(1.dp, color.copy(alpha = 0.3f), RoundedCornerShape(14.dp)).padding(16.dp)) {
         Text("HASIL ANALISIS ICT", color = UiColors.PrimaryYellow, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
         Spacer(Modifier.height(12.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text(bias, color = color, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-            Text("$confidence%", color = UiColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(bias, color = color, fontSize = 22.sp, fontWeight = FontWeight.Bold); Text("$confidence%", color = UiColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold) }
         Spacer(Modifier.height(10.dp)); HorizontalDivider(color = UiColors.SurfaceLight); Spacer(Modifier.height(8.dp))
         AnalysisRow("Current Price", if (price > 0) "$${String.format(Locale.US, "%.2f", price)}" else "-")
         AnalysisRow("Summary", json.optString("daily_bias_summary", "-"))
@@ -490,17 +460,9 @@ fun RecentAnalysesCard(items: List<com.example.data.database.IctAnalysisEntity>)
 
 @Composable
 fun ConceptCard(modifier: Modifier, concept: ConceptInfo) {
-    val statusColor = when (concept.status) {
-        "ACTIVE" -> UiColors.BullishGreen
-        "CONTEXT" -> UiColors.PrimaryYellow
-        "WAIT" -> UiColors.WaitGray
-        else -> UiColors.TextSecondary
-    }
+    val statusColor = when (concept.status) { "ACTIVE" -> UiColors.BullishGreen; "CONTEXT" -> UiColors.PrimaryYellow; "WAIT" -> UiColors.WaitGray; else -> UiColors.TextSecondary }
     Column(modifier.background(UiColors.SurfaceLight, RoundedCornerShape(12.dp)).padding(12.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(concept.icon, fontSize = 18.sp)
-            Text(concept.status, color = statusColor, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(concept.icon, fontSize = 18.sp); Text(concept.status, color = statusColor, fontSize = 9.sp, fontWeight = FontWeight.Bold) }
         Spacer(Modifier.height(4.dp))
         Text(concept.title, color = UiColors.PrimaryYellow, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(concept.timeframe, color = statusColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
@@ -510,10 +472,7 @@ fun ConceptCard(modifier: Modifier, concept: ConceptInfo) {
 
 @Composable
 fun MetricCard(modifier: Modifier, value: String, label: String, color: Color) {
-    Column(modifier.background(UiColors.Surface, RoundedCornerShape(10.dp)).border(1.dp, UiColors.SurfaceLight, RoundedCornerShape(10.dp)).padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, color = color, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        Text(label, color = UiColors.TextSecondary, fontSize = 11.sp)
-    }
+    Column(modifier.background(UiColors.Surface, RoundedCornerShape(10.dp)).border(1.dp, UiColors.SurfaceLight, RoundedCornerShape(10.dp)).padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text(value, color = color, fontSize = 20.sp, fontWeight = FontWeight.Bold); Text(label, color = UiColors.TextSecondary, fontSize = 11.sp) }
 }
 
 @Composable
@@ -528,10 +487,7 @@ fun ActionCard(title: String, subtitle: String, icon: androidx.compose.ui.graphi
 @Composable
 fun SessionRowAuto(name: String, utc: String, wib: String, active: Boolean) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Column {
-            Text(name, color = if (active) UiColors.BullishGreen else UiColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-            Text("WIB: $wib", color = UiColors.TextSecondary, fontSize = 11.sp)
-        }
+        Column { Text(name, color = if (active) UiColors.BullishGreen else UiColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp); Text("WIB: $wib", color = UiColors.TextSecondary, fontSize = 11.sp) }
         Text(utc, color = UiColors.TextSecondary, fontSize = 12.sp)
     }
 }
@@ -541,19 +497,12 @@ fun SectionTitle(text: String) { Spacer(Modifier.height(10.dp)); Text(text, colo
 
 @Composable
 fun AnalysisRow(label: String, value: String) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = UiColors.TextSecondary, fontSize = 12.sp, modifier = Modifier.weight(0.9f))
-        Text(value, color = UiColors.TextPrimary, fontSize = 12.sp, textAlign = TextAlign.End, modifier = Modifier.weight(1.3f), maxLines = 3, overflow = TextOverflow.Ellipsis)
-    }
+    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = Arrangement.SpaceBetween) { Text(label, color = UiColors.TextSecondary, fontSize = 12.sp, modifier = Modifier.weight(0.9f)); Text(value, color = UiColors.TextPrimary, fontSize = 12.sp, textAlign = TextAlign.End, modifier = Modifier.weight(1.3f), maxLines = 3, overflow = TextOverflow.Ellipsis) }
 }
 
 @Composable
 fun ErrorCard(text: String) {
-    Column(Modifier.fillMaxWidth().background(Color(0xFF2A1C1C), RoundedCornerShape(14.dp)).padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.ErrorOutline, null, tint = UiColors.BearishRed); Spacer(Modifier.width(8.dp)); Text("ANALISIS GAGAL", color = UiColors.BearishRed, fontWeight = FontWeight.Bold) }
-        Spacer(Modifier.height(4.dp))
-        Text(text, color = Color(0xFFFF8A80), fontSize = 12.sp)
-    }
+    Column(Modifier.fillMaxWidth().background(Color(0xFF2A1C1C), RoundedCornerShape(14.dp)).padding(16.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.ErrorOutline, null, tint = UiColors.BearishRed); Spacer(Modifier.width(8.dp)); Text("ANALISIS GAGAL", color = UiColors.BearishRed, fontWeight = FontWeight.Bold) }; Spacer(Modifier.height(4.dp)); Text(text, color = Color(0xFFFF8A80), fontSize = 12.sp) }
 }
 
 @Composable
@@ -564,15 +513,14 @@ fun TradeHistoryCard(type: String, result: String, entry: Double, tp: Double, sl
     val color = if (result == "WIN") UiColors.BullishGreen else UiColors.BearishRed
     Column(Modifier.fillMaxWidth().background(UiColors.Surface, RoundedCornerShape(12.dp)).border(1.dp, UiColors.SurfaceLight, RoundedCornerShape(12.dp)).padding(14.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("$type • $result", color = color, fontWeight = FontWeight.Bold, fontSize = 13.sp); Text(SimpleDateFormat("dd MMM HH:mm", Locale.getDefault()).format(Date(timestamp)), color = UiColors.TextSecondary, fontSize = 11.sp) }
-        AnalysisRow("Entry", String.format(Locale.US, "%.2f", entry))
-        AnalysisRow("TP", String.format(Locale.US, "%.2f", tp))
-        AnalysisRow("SL", String.format(Locale.US, "%.2f", sl))
+        AnalysisRow("Entry", String.format(Locale.US, "%.2f", entry)); AnalysisRow("TP", String.format(Locale.US, "%.2f", tp)); AnalysisRow("SL", String.format(Locale.US, "%.2f", sl))
     }
 }
 
-// ─────────────── HELPER FUNCTIONS ───────────────
-
 fun parseJson(raw: String): JSONObject? = try { JSONObject(raw) } catch (_: Exception) { null }
+fun conceptStatus(active: Boolean): String = if (active) "ACTIVE" else "NONE"
+fun setupStatus(status: String?): String = when (status?.lowercase(Locale.US)) { "valid" -> "ACTIVE"; "wait" -> "WAIT"; else -> "NONE" }
+fun formatTradeValue(value: Any?): String = when (value) { is Number -> if (value.toDouble() > 0.0) String.format(Locale.US, "%.2f", value.toDouble()) else "-"; is String -> value; else -> "-" }
 
 fun buildConcepts(json: JSONObject?, timeframe: String, session: SessionInfo): List<ConceptInfo> {
     val ms = json?.optJSONObject("market_structure")
@@ -592,35 +540,16 @@ fun buildConcepts(json: JSONObject?, timeframe: String, session: SessionInfo): L
     )
 }
 
-fun conceptStatus(active: Boolean): String = if (active) "ACTIVE" else "NONE"
-
 fun poiStatus(bullish: String?, bearish: String?): String {
-    val hasBullish = bullish != null && bullish != "-" && !bullish.isBlank()
-    val hasBearish = bearish != null && bearish != "-" && !bearish.isBlank()
+    val hasBullish = bullish != null && bullish != "-" && bullish.isNotBlank()
+    val hasBearish = bearish != null && bearish != "-" && bearish.isNotBlank()
     if (!hasBullish && !hasBearish) return "NONE"
     val hasActive = (hasBullish && bullish!!.contains("ACTIVE", true)) || (hasBearish && bearish!!.contains("ACTIVE", true))
     val hasContext = (hasBullish && bullish!!.contains("CONTEXT", true)) || (hasBearish && bearish!!.contains("CONTEXT", true))
-    return when {
-        hasActive -> "ACTIVE"
-        hasContext -> "CONTEXT"
-        hasBullish || hasBearish -> "ACTIVE"
-        else -> "NONE"
-    }
+    return when { hasActive -> "ACTIVE"; hasContext -> "CONTEXT"; else -> "ACTIVE" }
 }
 
-fun setupStatus(status: String?): String = when (status?.lowercase(Locale.US)) {
-    "valid" -> "ACTIVE"
-    "wait" -> "WAIT"
-    else -> "NONE"
-}
-
-fun formatTradeValue(value: Any?): String = when (value) { is Number -> if (value.toDouble() > 0.0) String.format(Locale.US, "%.2f", value.toDouble()) else "-"; is String -> value; else -> "-" }
-
-fun currentSessionInfo(now: Long): SessionInfo {
-    val all = sessionRows(now)
-    val active = all.firstOrNull { it.active }
-    return active ?: SessionInfo("Off-Session", "Off-Session", "-", "-", false)
-}
+fun currentSessionInfo(now: Long): SessionInfo = sessionRows(now).firstOrNull { it.active } ?: SessionInfo("Off-Session", "Off-Session", "-", "-", false)
 
 fun sessionRows(now: Long): List<SessionInfo> = listOf(
     buildSession("Asian Kill Zone", "Asia/Tokyo", 9, 0, 12, 0, now),
