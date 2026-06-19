@@ -42,6 +42,9 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
     val logs = _logs.asStateFlow()
     private var m1ClosedCount = 0
     private val emittedMarketEventKeys = mutableSetOf<String>()
+    private var setupWatch: SetupWatch? = null
+
+    private data class SetupWatch(val direction: String, val timeframe: String, val entry: Double, val target1: Double, val target2: Double, val stop: Double, var target1Logged: Boolean = false)
 
     init {
         viewModelScope.launch {
@@ -67,7 +70,7 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
             fetchAndSaveHistoricalCandles()
             log("Connecting to TwelveData WebSocket (XAU/USD)...")
             twelveClient?.connect("XAU/USD")
-            log("Market Event Scanner aktif: BOS, MSS, CISD, sweep, FVG, OB, OTE, dan displacement akan muncul di Terminal.")
+            log("Market Event Scanner aktif: BOS, MSS, CISD, sweep, FVG, OB, OTE, TP/STOP, dan displacement akan muncul di Terminal.")
             launch {
                 candleBuilder.candleClosed.collect { candle ->
                     val entity = CandleEntity(candle.time, candle.symbol, candle.timeframe, candle.open, candle.high, candle.low, candle.close, candle.tickCount, candle.closeTime, candle.isClosed)
@@ -81,7 +84,10 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
                 twelveClient?.ticks?.collect { tick ->
                     val price = tick.optString("price").toDoubleOrNull()
                     val timestamp = tick.optLong("timestamp", System.currentTimeMillis() / 1000)
-                    if (price != null && isValidXauPrice(price)) candleBuilder.processTick("XAU/USD", price, timestamp)
+                    if (price != null && isValidXauPrice(price)) {
+                        candleBuilder.processTick("XAU/USD", price, timestamp)
+                        checkSetupWatch(price)
+                    }
                 }
             }
         }
@@ -131,10 +137,38 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
                 val currentPrice = json.optDouble("current_price", ltf.last().close)
                 db.ictAnalysisDao().insert(IctAnalysisEntity(timeframe = json.optString("timeframe", tf), session = json.optString("session_context", session), bias = json.optString("bias", "NEUTRAL"), confidence = json.optInt("confidence_score", 0), price = "$${formatPrice(currentPrice)}", date = java.text.SimpleDateFormat("dd MMM yyyy, HH.mm", Locale.getDefault()).format(java.util.Date()), rawResult = cleanJson))
                 _analysisResultJson.value = cleanJson
+                armSetupWatch(json, tf, currentPrice)
                 log("ICT Analysis saved.")
             } catch (e: Exception) { _analysisErrorText.value = "Terjadi kesalahan: ${e.message}"; log("Analysis exception. Lihat tab Analyze.") }
             finally { _isAnalyzing.value = false }
         }
+    }
+
+    private fun armSetupWatch(json: JSONObject, timeframe: String, entryPrice: Double) {
+        val setup = json.optJSONObject("trade_setup") ?: return
+        if (!setup.optString("status", "wait").equals("valid", true)) { log("SETUP WAIT: ${setup.optString("invalidation", "menunggu konfirmasi")}"); return }
+        val direction = json.optString("bias", "NEUTRAL").uppercase(Locale.US)
+        val target1 = setup.optDouble("tp1", 0.0)
+        val target2 = setup.optDouble("tp2", 0.0)
+        val stop = setup.optDouble("stop_loss", 0.0)
+        if (direction !in listOf("BULLISH", "BEARISH") || target1 <= 0.0 || target2 <= 0.0 || stop <= 0.0) return
+        setupWatch = SetupWatch(direction, timeframe, entryPrice, target1, target2, stop)
+        log("SETUP ACTIVE [$timeframe] $direction | TP1 ${formatPrice(target1)} | TP2 ${formatPrice(target2)} | STOP ${formatPrice(stop)}")
+    }
+
+    private suspend fun checkSetupWatch(price: Double) {
+        val active = setupWatch ?: return
+        val buy = active.direction == "BULLISH"
+        if (!active.target1Logged && ((buy && price >= active.target1) || (!buy && price <= active.target1))) {
+            active.target1Logged = true
+            log("TP1 tercapai [${active.timeframe}] ${active.direction} @ ${formatPrice(price)}")
+        }
+        val finished = (buy && price >= active.target2) || (!buy && price <= active.target2) || (buy && price <= active.stop) || (!buy && price >= active.stop)
+        if (!finished) return
+        val success = (buy && price >= active.target2) || (!buy && price <= active.target2)
+        log(if (success) "TP2 tercapai [${active.timeframe}] ${active.direction} @ ${formatPrice(price)}" else "STOP tercapai [${active.timeframe}] ${active.direction} @ ${formatPrice(price)}")
+        db.tradeDao().insert(TradeHistoryEntity(pair = "XAU/USD", methodId = 0, type = if (buy) "BUY" else "SELL", entryPrice = active.entry, takeProfit = active.target2, stopLoss = active.stop, result = if (success) "WIN" else "LO" + "SS"))
+        setupWatch = null
     }
 
     private suspend fun loadCandlesForAnalysis(timeframe: String): List<CandleEntity> {
