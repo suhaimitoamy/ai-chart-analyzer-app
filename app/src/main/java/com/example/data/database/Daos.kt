@@ -54,11 +54,11 @@ interface IctAnalysisDao {
 
 @Dao
 interface CandleDao {
-    @Query("SELECT * FROM candle_history WHERE symbol = :symbol ORDER BY time ASC")
-    fun getAllCandles(symbol: String): Flow<List<CandleEntity>>
+    @Query("SELECT * FROM candle_history WHERE symbol = :symbol AND timeframe = :timeframe ORDER BY time ASC")
+    fun getAllCandles(symbol: String, timeframe: String): Flow<List<CandleEntity>>
 
-    @Query("SELECT * FROM candle_history WHERE symbol = :symbol ORDER BY time DESC LIMIT :limit")
-    suspend fun getRecentCandles(symbol: String, limit: Int): List<CandleEntity>
+    @Query("SELECT * FROM candle_history WHERE symbol = :symbol AND timeframe = :timeframe ORDER BY time DESC LIMIT :limit")
+    suspend fun getRecentCandles(symbol: String, timeframe: String, limit: Int): List<CandleEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(candle: CandleEntity)
