@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.BuildConfig
 import com.example.data.database.AppDatabase
+import com.example.data.database.SettingsManager
 import com.example.data.database.IctAnalysisEntity
 import com.example.data.database.TradeHistoryEntity
 import com.example.data.database.WalletEntity
@@ -21,15 +22,11 @@ import org.json.JSONObject
 class TradingBotViewModel(application: Application) : AndroidViewModel(application) {
     private val db = AppDatabase.getDatabase(application)
     
-    // Fallback safely if keys are missing
-    private val twelveKey = try { BuildConfig.TWELVE_API_KEY } catch (e: Exception) { "" }
-    private val telToken = try { BuildConfig.TELEGRAM_BOT_TOKEN } catch (e: Exception) { "" }
-    private val telChatId = try { BuildConfig.TELEGRAM_CHAT_ID } catch (e: Exception) { "" }
-    private val aiKey = try { BuildConfig.DEEPSEEK_API_KEY } catch (e: Exception) { "" }
-
-    private val twelveClient = TwelveDataClient(twelveKey)
-    private val telClient = TelegramClient(telToken, telChatId)
-    private val aiClient = DeepSeekClient(aiKey)
+    val settings = SettingsManager(application)
+    
+    private var twelveClient: TwelveDataClient? = null
+    private var telClient: TelegramClient? = null
+    private var aiClient: DeepSeekClient? = null
     private val candleBuilder = CandleBuilder()
 
     val wallet: StateFlow<WalletEntity> = db.walletDao().getWallet()
@@ -75,13 +72,30 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
         _logs.update { (listOf(msg) + it).take(100) }
     }
 
+    fun saveKeys(twelve: String, deepseek: String, telToken: String, telChatId: String) {
+        settings.twelveApiKey = twelve
+        settings.deepseekApiKey = deepseek
+        settings.telegramBotToken = telToken
+        settings.telegramChatId = telChatId
+    }
+
     fun startBot() {
         if (_botStatus.value == "Running") return
+        if (!settings.areKeysSet()) {
+            _botStatus.value = "Error: API Keys not set"
+            log("Gagal Start: Harap isi semua API Key di menu Settings!")
+            return
+        }
+
+        twelveClient = TwelveDataClient(settings.twelveApiKey)
+        telClient = TelegramClient(settings.telegramBotToken, settings.telegramChatId)
+        aiClient = DeepSeekClient(settings.deepseekApiKey)
+
         _botStatus.value = "Running"
         viewModelScope.launch {
             log("Fetching Historical Candles for XAU/USD...")
             try {
-                val history = twelveClient.fetchHistoricalCandles("XAU/USD", "1min", 100)
+                val history = twelveClient?.fetchHistoricalCandles("XAU/USD", "1min", 100) ?: emptyList()
                 if (history.isNotEmpty()) {
                     db.candleDao().insertAll(history)
                     log("Berhasil menarik ${history.size} candle histori ke database.")
@@ -91,7 +105,7 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
             }
 
             log("Connecting to TwelveData WebSocket (XAU/USD)...")
-            twelveClient.connect("XAU/USD")
+            twelveClient?.connect("XAU/USD")
              
             // Listen for completed candles
             launch {
@@ -114,7 +128,7 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
             launch {
                 var lastPrice = 0.0
                 var lastWarningTime = 0L
-                twelveClient.ticks.collect { tick ->
+                twelveClient?.ticks?.collect { tick ->
                     val priceStr = tick.optString("price")
                     val price = priceStr.toDoubleOrNull()
                     val timestamp = tick.optLong("timestamp", System.currentTimeMillis() / 1000)
@@ -139,7 +153,7 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
                                         Harga saat ini: $price
                                     """.trimIndent()
                                     
-                                    telClient.sendMessage(msg)
+                                    telClient?.sendMessage(msg)
                                     log("Impulsive move warning sent.")
                                 }
                             }
@@ -152,7 +166,7 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
             launch {
                 log("Starting Telegram Polling...")
                 while (_botStatus.value == "Running") {
-                    val messages = telClient.pollUpdates()
+                    val messages = telClient?.pollUpdates() ?: emptyList()
                     for (msg in messages) {
                         handleTelegramMessage(msg)
                     }
@@ -169,11 +183,11 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
                     step = (step + 1) % 5
                     when (step) {
                         1 -> {
-                            telClient.sendMessage("🔍 [AUTONOMOUS SCAN] XAUUSD M15\nHarga menyentuh zona Retail Liquidity/IDM di 2030.50. Menunggu konfirmasi Change of Character (CHoCH) untuk entry...")
+                            telClient?.sendMessage("🔍 [AUTONOMOUS SCAN] XAUUSD M15\nHarga menyentuh zona Retail Liquidity/IDM di 2030.50. Menunggu konfirmasi Change of Character (CHoCH) untuk entry...")
                             log("Autonomous step: Sweep Liquidity")
                         }
                         2 -> {
-                            telClient.sendMessage("✅ [MARKET STRUCTURE SHIFT]\nCHoCH Bullish terkonfirmasi di XAUUSD M15. Fair Value Gap (FVG) terbentuk di 2032.00 - 2033.50. Mempersiapkan pending order Buy Limit.")
+                            telClient?.sendMessage("✅ [MARKET STRUCTURE SHIFT]\nCHoCH Bullish terkonfirmasi di XAUUSD M15. Fair Value Gap (FVG) terbentuk di 2032.00 - 2033.50. Mempersiapkan pending order Buy Limit.")
                             log("Autonomous step: CHoCH Confirmed")
                         }
                         3 -> {
@@ -188,15 +202,15 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
                                 
                                 Konteks: Harga baru saja memitigasi demand zone M15 (Order Block). Bot sekarang dalam posisi aktif.
                             """.trimIndent()
-                            telClient.sendMessage(signalMessage)
+                            telClient?.sendMessage(signalMessage)
                             log("Autonomous step: Order Triggered")
                         }
                         4 -> {
-                            telClient.sendMessage("🔔 [UPDATE POSISI]\nXAUUSD bergerak impulsif naik mem-break resisten lokal. Profit berjalan +25 pips (2035.50). Agent otomatis memindahkan Stop Loss ke Breakeven (Entry Price) untuk perlindungan modal.")
+                            telClient?.sendMessage("🔔 [UPDATE POSISI]\nXAUUSD bergerak impulsif naik mem-break resisten lokal. Profit berjalan +25 pips (2035.50). Agent otomatis memindahkan Stop Loss ke Breakeven (Entry Price) untuk perlindungan modal.")
                             log("Autonomous step: SL to BE")
                         }
                         0 -> {
-                            telClient.sendMessage("🎯 [TAKE PROFIT HIT]\nXAUUSD otomatis ditutup. Harga break 2038.00 (TP1 Hit!).\nWin rate total sementara naik sebesar +0.4%. Mengkalkulasi setup berikutnya...")
+                            telClient?.sendMessage("🎯 [TAKE PROFIT HIT]\nXAUUSD otomatis ditutup. Harga break 2038.00 (TP1 Hit!).\nWin rate total sementara naik sebesar +0.4%. Mengkalkulasi setup berikutnya...")
                             log("Autonomous step: TP Hit")
                             kotlinx.coroutines.delay(15_000) // Wait a bit longer before repeating
                         }
@@ -208,7 +222,7 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
     
     fun stopBot() {
         _botStatus.value = "Disconnected"
-        twelveClient.disconnect()
+        twelveClient?.disconnect()
         log("Bot stopped.")
     }
     
@@ -242,7 +256,7 @@ Berikan output murni format JSON tanpa embel-embel markdown dengan struktur:
   "market_structure": { "trend": "Bullish" }
 }
 """.trimIndent()
-                val responseStr = aiClient.analyzeChart(prompt)
+                val responseStr = aiClient?.analyzeChart(prompt) ?: "{}"
                 
                 // Coba bersihkan markdown json jika ada
                 val cleanJson = responseStr.replace("```json", "").replace("```", "").trim()

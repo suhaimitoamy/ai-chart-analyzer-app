@@ -88,6 +88,18 @@ fun DashboardScreen(viewModel: TradingBotViewModel = viewModel()) {
                         unselectedTextColor = UiColors.TextSecondary,
                         indicatorColor = Color.Transparent
                     )
+                NavigationBarItem(
+                    selected = currentTab == "Settings",
+                    onClick = { currentTab = "Settings" },
+                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                    label = { Text("Settings") },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = UiColors.PrimaryYellow,
+                        unselectedIconColor = UiColors.TextSecondary,
+                        selectedTextColor = UiColors.PrimaryYellow,
+                        unselectedTextColor = UiColors.TextSecondary,
+                        indicatorColor = Color.Transparent
+                    )
                 )
             }
         },
@@ -104,6 +116,7 @@ fun DashboardScreen(viewModel: TradingBotViewModel = viewModel()) {
                 "Dashboard" -> DashboardTab(viewModel = viewModel, onNavigateAnalyze = { currentTab = "Analyze" })
                 "Analyze" -> AnalyzeTab(viewModel)
                 "Journal" -> JournalTab(viewModel)
+                "Settings" -> SettingsTab(viewModel)
             }
         }
     }
@@ -751,5 +764,108 @@ fun FilterChip(text: String, isSelected: Boolean) {
             .clickable { /* state handling could be added */ }
     ) {
         Text(text, color = if (isSelected) Color.Black else UiColors.TextSecondary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsTab(viewModel: TradingBotViewModel) {
+    var twelveKey by remember { mutableStateOf(viewModel.settings.twelveApiKey) }
+    var deepseekKey by remember { mutableStateOf(viewModel.settings.deepseekApiKey) }
+    var telToken by remember { mutableStateOf(viewModel.settings.telegramBotToken) }
+    var telChatId by remember { mutableStateOf(viewModel.settings.telegramChatId) }
+    var isSaved by remember { mutableStateOf(false) }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Text("API Keys Configuration", color = UiColors.PrimaryYellow, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("Kunci rahasia ini disimpan secara aman di memori HP Anda (SharedPreferences).", color = UiColors.TextSecondary, fontSize = 14.sp)
+        }
+
+        item {
+            OutlinedTextField(
+                value = twelveKey,
+                onValueChange = { twelveKey = it },
+                label = { Text("Twelve Data API Key") },
+                modifier = Modifier.fillMaxWidth(),
+                colors = TextFieldDefaults.outlinedTextFieldColors(
+                    textColor = UiColors.TextPrimary,
+                    cursorColor = UiColors.PrimaryYellow,
+                    focusedBorderColor = UiColors.PrimaryYellow,
+                    unfocusedBorderColor = UiColors.TextSecondary
+                )
+            )
+        }
+
+        item {
+            OutlinedTextField(
+                value = deepseekKey,
+                onValueChange = { deepseekKey = it },
+                label = { Text("DeepSeek API Key") },
+                modifier = Modifier.fillMaxWidth(),
+                colors = TextFieldDefaults.outlinedTextFieldColors(
+                    textColor = UiColors.TextPrimary,
+                    cursorColor = UiColors.PrimaryYellow,
+                    focusedBorderColor = UiColors.PrimaryYellow,
+                    unfocusedBorderColor = UiColors.TextSecondary
+                )
+            )
+        }
+
+        item {
+            OutlinedTextField(
+                value = telToken,
+                onValueChange = { telToken = it },
+                label = { Text("Telegram Bot Token") },
+                modifier = Modifier.fillMaxWidth(),
+                colors = TextFieldDefaults.outlinedTextFieldColors(
+                    textColor = UiColors.TextPrimary,
+                    cursorColor = UiColors.PrimaryYellow,
+                    focusedBorderColor = UiColors.PrimaryYellow,
+                    unfocusedBorderColor = UiColors.TextSecondary
+                )
+            )
+        }
+
+        item {
+            OutlinedTextField(
+                value = telChatId,
+                onValueChange = { telChatId = it },
+                label = { Text("Telegram Chat ID") },
+                modifier = Modifier.fillMaxWidth(),
+                colors = TextFieldDefaults.outlinedTextFieldColors(
+                    textColor = UiColors.TextPrimary,
+                    cursorColor = UiColors.PrimaryYellow,
+                    focusedBorderColor = UiColors.PrimaryYellow,
+                    unfocusedBorderColor = UiColors.TextSecondary
+                )
+            )
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = {
+                    viewModel.saveKeys(twelveKey, deepseekKey, telToken, telChatId)
+                    isSaved = true
+                    // Coba start bot setelah disave
+                    viewModel.startBot()
+                },
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = UiColors.PrimaryYellow)
+            ) {
+                Text("Save & Start Bot", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
+            if (isSaved) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("✅ Tersimpan! Bot mencoba untuk menyala...", color = UiColors.BullishGreen, fontSize = 14.sp)
+            }
+        }
     }
 }
