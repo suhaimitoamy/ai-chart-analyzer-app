@@ -36,6 +36,11 @@ class TwelveDataClient(private val apiKey: String) {
                 try {
                     val json = JSONObject(text)
                     if (json.has("price")) {
+                        val price = json.optString("price").toDoubleOrNull()
+                        val timestamp = json.optLong("timestamp", System.currentTimeMillis() / 1000)
+                        if (price != null) {
+                            MarketPriceCache.update(price, timestamp)
+                        }
                         _ticks.tryEmit(json)
                     }
                 } catch (e: Exception) {
