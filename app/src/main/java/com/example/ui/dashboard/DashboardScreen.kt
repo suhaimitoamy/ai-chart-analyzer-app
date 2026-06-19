@@ -4,27 +4,74 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Circle
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.GpsFixed
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.RadioButtonChecked
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material.icons.filled.TrendingDown
+import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import kotlinx.coroutines.delay
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 object UiColors {
     val Background = Color(0xFF0F111A)
@@ -37,99 +84,36 @@ object UiColors {
     val BullishGreen = Color(0xFF4ADE80)
 }
 
+data class SessionInfo(val name: String, val status: String, val utcRange: String, val wibRange: String, val active: Boolean)
+data class ConceptInfo(val title: String, val icon: String, val status: String, val timeframe: String, val value: String)
+
 @Composable
 fun DashboardScreen(viewModel: TradingBotViewModel = viewModel()) {
     var currentTab by remember { mutableStateOf("Dashboard") }
+    val session = rememberLiveSession()
 
     LaunchedEffect(Unit) {
-        viewModel.startBot()
+        if (viewModel.settings.areKeysSet()) viewModel.startBot() else viewModel.log("Menunggu TwelveData API Key di Settings.")
     }
 
     Scaffold(
         bottomBar = {
-            NavigationBar(
-                containerColor = UiColors.Surface,
-                contentColor = UiColors.TextSecondary
-            ) {
-                NavigationBarItem(
-                    selected = currentTab == "Dashboard",
-                    onClick = { currentTab = "Dashboard" },
-                    icon = { Icon(Icons.Default.GridView, contentDescription = null) },
-                    label = { Text("Dashboard") },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = UiColors.PrimaryYellow,
-                        unselectedIconColor = UiColors.TextSecondary,
-                        selectedTextColor = UiColors.PrimaryYellow,
-                        unselectedTextColor = UiColors.TextSecondary,
-                        indicatorColor = Color.Transparent
-                    )
-                )
-                NavigationBarItem(
-                    selected = currentTab == "Analyze",
-                    onClick = { currentTab = "Analyze" },
-                    icon = { Icon(Icons.Default.GpsFixed, contentDescription = null) },
-                    label = { Text("ICT Analyze") },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = UiColors.PrimaryYellow,
-                        unselectedIconColor = UiColors.TextSecondary,
-                        selectedTextColor = UiColors.PrimaryYellow,
-                        unselectedTextColor = UiColors.TextSecondary,
-                        indicatorColor = Color.Transparent
-                    )
-                )
-                NavigationBarItem(
-                    selected = currentTab == "Journal",
-                    onClick = { currentTab = "Journal" },
-                    icon = { Icon(Icons.Default.MenuBook, contentDescription = null) },
-                    label = { Text("Trade Journal") },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = UiColors.PrimaryYellow,
-                        unselectedIconColor = UiColors.TextSecondary,
-                        selectedTextColor = UiColors.PrimaryYellow,
-                        unselectedTextColor = UiColors.TextSecondary,
-                        indicatorColor = Color.Transparent
-                    )
-                )
-                NavigationBarItem(
-                    selected = currentTab == "Terminal",
-                    onClick = { currentTab = "Terminal" },
-                    icon = { Icon(Icons.Default.Terminal, contentDescription = null) },
-                    label = { Text("Terminal") },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = UiColors.PrimaryYellow,
-                        unselectedIconColor = UiColors.TextSecondary,
-                        selectedTextColor = UiColors.PrimaryYellow,
-                        unselectedTextColor = UiColors.TextSecondary,
-                        indicatorColor = Color.Transparent
-                    )
-                )
-                NavigationBarItem(
-                    selected = currentTab == "Settings",
-                    onClick = { currentTab = "Settings" },
-                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                    label = { Text("Settings") },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = UiColors.PrimaryYellow,
-                        unselectedIconColor = UiColors.TextSecondary,
-                        selectedTextColor = UiColors.PrimaryYellow,
-                        unselectedTextColor = UiColors.TextSecondary,
-                        indicatorColor = Color.Transparent
-                    )
-                )
+            NavigationBar(containerColor = UiColors.Surface, contentColor = UiColors.TextSecondary) {
+                NavigationBarItem(selected = currentTab == "Dashboard", onClick = { currentTab = "Dashboard" }, icon = { Icon(Icons.Default.GridView, null) }, label = { Text("Dashboard") }, colors = navColors())
+                NavigationBarItem(selected = currentTab == "Analyze", onClick = { currentTab = "Analyze" }, icon = { Icon(Icons.Default.GpsFixed, null) }, label = { Text("ICT Analyze") }, colors = navColors())
+                NavigationBarItem(selected = currentTab == "Journal", onClick = { currentTab = "Journal" }, icon = { Icon(Icons.Default.History, null) }, label = { Text("History Trade") }, colors = navColors())
+                NavigationBarItem(selected = currentTab == "Terminal", onClick = { currentTab = "Terminal" }, icon = { Icon(Icons.Default.Terminal, null) }, label = { Text("Terminal") }, colors = navColors())
+                NavigationBarItem(selected = currentTab == "Settings", onClick = { currentTab = "Settings" }, icon = { Icon(Icons.Default.Settings, null) }, label = { Text("Settings") }, colors = navColors())
             }
         },
         containerColor = UiColors.Background
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize()
-        ) {
+        Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
             TopBar()
             HorizontalDivider(color = UiColors.SurfaceLight)
             when (currentTab) {
-                "Dashboard" -> DashboardTab(viewModel = viewModel, onNavigateAnalyze = { currentTab = "Analyze" })
-                "Analyze" -> AnalyzeTab(viewModel)
+                "Dashboard" -> DashboardTab(viewModel, session, onNavigateAnalyze = { currentTab = "Analyze" })
+                "Analyze" -> AnalyzeTab(viewModel, session)
                 "Journal" -> JournalTab(viewModel)
                 "Terminal" -> TerminalTab(viewModel)
                 "Settings" -> SettingsTab(viewModel)
@@ -139,22 +123,31 @@ fun DashboardScreen(viewModel: TradingBotViewModel = viewModel()) {
 }
 
 @Composable
+private fun navColors() = NavigationBarItemDefaults.colors(
+    selectedIconColor = UiColors.PrimaryYellow,
+    unselectedIconColor = UiColors.TextSecondary,
+    selectedTextColor = UiColors.PrimaryYellow,
+    unselectedTextColor = UiColors.TextSecondary,
+    indicatorColor = Color.Transparent
+)
+
+@Composable
+fun rememberLiveSession(): SessionInfo {
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            now = System.currentTimeMillis()
+            delay(1000)
+        }
+    }
+    return currentSessionInfo(now)
+}
+
+@Composable
 fun TopBar() {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(UiColors.PrimaryYellow)
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                contentAlignment = Alignment.Center
-            ) {
+            Box(modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(UiColors.PrimaryYellow).padding(horizontal = 8.dp, vertical = 6.dp), contentAlignment = Alignment.Center) {
                 Text("XAU", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
             Spacer(modifier = Modifier.width(12.dp))
@@ -164,11 +157,7 @@ fun TopBar() {
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .background(UiColors.BullishGreen, CircleShape)
-            )
+            Box(modifier = Modifier.size(8.dp).background(UiColors.BullishGreen, CircleShape))
             Spacer(modifier = Modifier.width(6.dp))
             Text("Live", color = UiColors.TextSecondary, fontSize = 12.sp)
         }
@@ -176,971 +165,395 @@ fun TopBar() {
 }
 
 @Composable
-fun DashboardTab(viewModel: TradingBotViewModel, onNavigateAnalyze: () -> Unit) {
-    val ictAnalyses by viewModel.ictAnalyses.collectAsState()
-    val recentAnalysis = ictAnalyses.firstOrNull()
-    val total = ictAnalyses.size
-    val bullish = ictAnalyses.count { it.bias.equals("BULLISH", true) }
-    val bearish = ictAnalyses.count { it.bias.equals("BEARISH", true) }
-    
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        item { Spacer(modifier = Modifier.height(8.dp)) }
-        // Top Section: INNER CIRCLE TRADER
+fun DashboardTab(viewModel: TradingBotViewModel, session: SessionInfo, onNavigateAnalyze: () -> Unit) {
+    val analyses by viewModel.ictAnalyses.collectAsState()
+    val latest = analyses.firstOrNull()
+    val json = latest?.rawResult?.let { parseJson(it) }
+    val concepts = buildConcepts(json, latest?.timeframe ?: "-", session)
+    val activeConcepts = concepts.count { it.status == "ACTIVE" }
+
+    LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        item { Spacer(Modifier.height(8.dp)) }
+        item { HeaderMarketCard(session) }
         item {
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("INNER CIRCLE TRADER ", color = UiColors.PrimaryYellow, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
-                    Box(modifier = Modifier.size(4.dp).background(UiColors.PrimaryYellow, CircleShape))
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row {
-                        Text("XAU", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = UiColors.TextPrimary)
-                        Text("/", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = UiColors.PrimaryYellow)
-                        Text("USD", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = UiColors.TextPrimary)
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text("UTC Time", fontSize = 12.sp, color = UiColors.TextSecondary)
-                        Text("07:33", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = UiColors.TextPrimary)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(modifier = Modifier.size(6.dp).background(UiColors.TextSecondary, CircleShape))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Off-Session", fontSize = 12.sp, color = UiColors.TextSecondary)
-                        }
-                    }
-                }
-                Text("Smart Money Concept • ICT Methodology", fontSize = 14.sp, color = UiColors.TextSecondary)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                MetricCard(Modifier.weight(1f), analyses.size.toString(), "Analyses", UiColors.PrimaryYellow)
+                MetricCard(Modifier.weight(1f), analyses.count { it.bias.equals("BULLISH", true) }.toString(), "Bullish", UiColors.BullishGreen)
+                MetricCard(Modifier.weight(1f), analyses.count { it.bias.equals("BEARISH", true) }.toString(), "Bearish", UiColors.BearishRed)
             }
         }
-
-        // Card: Latest AI Bias
-        if (recentAnalysis != null) {
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(if (recentAnalysis.bias.equals("BULLISH", true)) Color(0xFF162B1D) else Color(0xFF2A1C1C), RoundedCornerShape(16.dp))
-                        .border(1.dp, if (recentAnalysis.bias.equals("BULLISH", true)) Color(0xFF234B2F) else Color(0xFF4A2B2B), RoundedCornerShape(16.dp))
-                        .padding(16.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                if (recentAnalysis.bias.equals("BULLISH", true)) Icons.Default.TrendingUp else Icons.Default.TrendingDown, 
-                                contentDescription = null, 
-                                tint = if (recentAnalysis.bias.equals("BULLISH", true)) UiColors.BullishGreen else UiColors.BearishRed, 
-                                modifier = Modifier.size(32.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text("LATEST AI BIAS", color = UiColors.TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                Text(recentAnalysis.bias, color = if (recentAnalysis.bias.equals("BULLISH", true)) UiColors.BullishGreen else UiColors.BearishRed, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text("Confidence", color = UiColors.TextSecondary, fontSize = 12.sp)
-                            Text("${recentAnalysis.confidence}%", color = UiColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        }
-
-        // Stats row
         item {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard(modifier = Modifier.weight(1f), total.toString(), "Total Analyses", color = UiColors.TextPrimary)
-                StatCard(modifier = Modifier.weight(1f), bullish.toString(), "Bullish Signals", color = UiColors.BullishGreen, icon = Icons.Default.TrendingUp)
-                StatCard(modifier = Modifier.weight(1f), bearish.toString(), "Bearish Signals", color = UiColors.BearishRed, icon = Icons.Default.TrendingDown)
-            }
+            ActionCard("Analisis ICT Sekarang", "Rule engine membaca candle real-time dan market events", Icons.Default.FlashOn) { onNavigateAnalyze() }
         }
-
-        // Run ICT Analysis card
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(UiColors.Surface, RoundedCornerShape(16.dp))
-                    .clickable { onNavigateAnalyze() }
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .background(UiColors.PrimaryYellow, RoundedCornerShape(12.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.FlashOn, contentDescription = null, tint = Color.Black)
-                }
-                Spacer(modifier = Modifier.width(16.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Run ICT Analysis", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = UiColors.TextPrimary)
-                    Text("AI akan analisis XAUUSD menggunakan konsep ICT", fontSize = 12.sp, color = UiColors.TextSecondary)
-                }
-                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = UiColors.TextSecondary)
-            }
-        }
-
-        // Trade Sessions
-        item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(UiColors.Surface, RoundedCornerShape(16.dp))
-                    .padding(16.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Schedule, contentDescription=null, tint = UiColors.PrimaryYellow, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Trading Sessions (UTC)", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = UiColors.TextPrimary)
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-                SessionRow("Asian", "WIB: 07:00-10:00", "00:00 - 03:00")
-                HorizontalDivider(color = UiColors.SurfaceLight, modifier = Modifier.padding(vertical = 12.dp))
-                SessionRow("London", "WIB: 15:00-19:00", "08:00 - 12:00")
-                HorizontalDivider(color = UiColors.SurfaceLight, modifier = Modifier.padding(vertical = 12.dp))
-                SessionRow("New York", "WIB: 20:00-00:00", "13:00 - 17:00")
-            }
-        }
-
-        item { Spacer(modifier = Modifier.height(8.dp)) }
-
-        // ICT Concepts Covered
-        item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(UiColors.Surface, RoundedCornerShape(16.dp))
-                    .padding(16.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.RadioButtonChecked, contentDescription=null, tint = UiColors.PrimaryYellow, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("ICT Concepts Covered", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = UiColors.TextPrimary)
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ConceptCard(modifier=Modifier.weight(1f), icon = "\uD83D\uDCD0", title = "Market Structure", sub = "BOS • CHoCH • MSB")
-                    ConceptCard(modifier=Modifier.weight(1f), icon = "\uD83E\uDDF1", title = "Order Blocks", sub = "Bullish OB • Bearish OB")
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ConceptCard(modifier=Modifier.weight(1f), icon = "⚖️", title = "Fair Value Gaps", sub = "FVG • IFVG • Breaker")
-                    ConceptCard(modifier=Modifier.weight(1f), icon = "💧", title = "Liquidity", sub = "BSL • SSL • EQH • EQL")
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ConceptCard(modifier=Modifier.weight(1f), icon = "\uD83D\uDCCF", title = "Premium / Discount", sub = "50% Equilibrium Zone")
-                    ConceptCard(modifier=Modifier.weight(1f), icon = "🎯", title = "Kill Zones", sub = "London • NY • Silver Bullet")
-                }
-            }
-        }
-
-        // Recent Analyses
-        item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(UiColors.Surface, RoundedCornerShape(16.dp))
-                    .padding(16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(), 
-                    horizontalArrangement = Arrangement.SpaceBetween, 
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Recent Analyses", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = UiColors.TextPrimary)
-                    Text("View all →", fontSize = 12.sp, color = UiColors.PrimaryYellow)
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-
-                if (ictAnalyses.isEmpty()) {
-                    Text("Belum ada analisis", color = UiColors.TextSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(16.dp))
-                } else {
-                    ictAnalyses.take(5).forEachIndexed { index, it ->
-                        RecentAnalysisRow(
-                            isBullish = it.bias.equals("BULLISH", true),
-                            tf = it.timeframe,
-                            session = it.session,
-                            confidence = "${it.confidence}%",
-                            date = it.date
-                        )
-                        if (index < ictAnalyses.take(5).size - 1) {
-                            HorizontalDivider(color = UiColors.SurfaceLight)
-                        }
-                    }
-                }
-            }
-        }
-        item { Spacer(modifier = Modifier.height(24.dp)) }
+        item { SessionsCard(session) }
+        item { ConceptsCoveredCard(concepts, activeConcepts) }
+        item { RecentAnalysesCard(analyses.take(5)) }
+        item { Spacer(Modifier.height(24.dp)) }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AnalyzeTab(viewModel: TradingBotViewModel) {
-    var selectedTimeframe by remember { mutableStateOf("H1") }
-    var selectedKillZone by remember { mutableStateOf("London Open Kill Zone") }
-    var expandedKillZone by remember { mutableStateOf(false) }
-    var notes by remember { mutableStateOf("") }
-    val killZones = listOf("Asian Kill Zone", "London Open Kill Zone", "New York Kill Zone", "Silver Bullet")
+fun HeaderMarketCard(session: SessionInfo) {
+    val utcText = liveUtcText()
+    Column(modifier = Modifier.fillMaxWidth().background(UiColors.Surface, RoundedCornerShape(16.dp)).padding(18.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("INNER CIRCLE TRADER ", color = UiColors.PrimaryYellow, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
+            Box(Modifier.size(4.dp).background(UiColors.PrimaryYellow, CircleShape))
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Row {
+                Text("XAU", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = UiColors.TextPrimary)
+                Text("/", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = UiColors.PrimaryYellow)
+                Text("USD", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = UiColors.TextPrimary)
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text("UTC Time", fontSize = 12.sp, color = UiColors.TextSecondary)
+                Text(utcText, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = UiColors.TextPrimary)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(6.dp).background(if (session.active) UiColors.BullishGreen else UiColors.TextSecondary, CircleShape))
+                    Spacer(Modifier.width(4.dp))
+                    Text(session.status, fontSize = 12.sp, color = if (session.active) UiColors.BullishGreen else UiColors.TextSecondary)
+                }
+            }
+        }
+        Text("Smart Money Concept • ICT Methodology", fontSize = 14.sp, color = UiColors.TextSecondary)
+    }
+}
 
-    val isAnalyzing by viewModel.isAnalyzing.collectAsState()
-    val ictAnalyses by viewModel.ictAnalyses.collectAsState()
-    val analysisResultJson by viewModel.analysisResultJson.collectAsState()
-    val analysisErrorText by viewModel.analysisErrorText.collectAsState()
+@Composable
+fun liveUtcText(): String {
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) { while (true) { now = System.currentTimeMillis(); delay(1000) } }
+    return SimpleDateFormat("HH:mm", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(now))
+}
 
-    var selectedFileName by remember { mutableStateOf<String?>(null) }
-    val filePickerLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) {
-            viewModel.uploadDataFile(uri)
-            selectedFileName = uri.lastPathSegment ?: "Data_Backtest_SMC.csv"
+@Composable
+fun SessionsCard(session: SessionInfo) {
+    val rows = sessionRows(System.currentTimeMillis())
+    Column(Modifier.fillMaxWidth().background(UiColors.Surface, RoundedCornerShape(16.dp)).padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Schedule, null, tint = UiColors.PrimaryYellow, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Trading Sessions Auto DST", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = UiColors.TextPrimary)
+        }
+        Spacer(Modifier.height(12.dp))
+        rows.forEachIndexed { index, it ->
+            SessionRowAuto(it.name, it.utcRange, it.wibRange, it.name == session.name && session.active)
+            if (index < rows.lastIndex) HorizontalDivider(color = UiColors.SurfaceLight, modifier = Modifier.padding(vertical = 10.dp))
         }
     }
+}
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        item { Spacer(modifier = Modifier.height(8.dp)) }
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.GpsFixed, contentDescription = null, tint = UiColors.PrimaryYellow, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("ANALISIS ICT", color = UiColors.PrimaryYellow, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("XAUUSD Smart Money Analysis", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = UiColors.TextPrimary)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text("AI menganalisis XAUUSD secara mendalam dengan konsep ICT murni", fontSize = 14.sp, color = UiColors.TextSecondary)
+@Composable
+fun ConceptsCoveredCard(concepts: List<ConceptInfo>, activeCount: Int) {
+    Column(Modifier.fillMaxWidth().background(UiColors.Surface, RoundedCornerShape(16.dp)).padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.RadioButtonChecked, null, tint = UiColors.PrimaryYellow, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("ICT Concepts Covered • $activeCount/${concepts.size} Active", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = UiColors.TextPrimary)
         }
+        Spacer(Modifier.height(14.dp))
+        concepts.chunked(2).forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                row.forEach { ConceptCard(Modifier.weight(1f), it) }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+    }
+}
 
+@Composable
+fun AnalyzeTab(viewModel: TradingBotViewModel, session: SessionInfo) {
+    var selectedTimeframe by remember { mutableStateOf("M5") }
+    val isAnalyzing by viewModel.isAnalyzing.collectAsState()
+    val result by viewModel.analysisResultJson.collectAsState()
+    val error by viewModel.analysisErrorText.collectAsState()
+
+    LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        item { Spacer(Modifier.height(8.dp)) }
         item {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(UiColors.Surface, RoundedCornerShape(16.dp))
-                    .padding(20.dp)
-            ) {
-                Column {
-                    Text("TIMEFRAME (PERIODE GRAFIK)", fontSize = 12.sp, color = UiColors.TextSecondary, fontWeight = FontWeight.SemiBold)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    val timeframes1 = listOf("M1", "M5", "M15", "M30", "H1")
-                    val timeframes2 = listOf("H4", "D1", "W1")
-                    Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        timeframes1.forEach { tf ->
-                            val isSelected = tf == selectedTimeframe
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isSelected) UiColors.PrimaryYellow else UiColors.SurfaceLight)
-                                    .clickable { selectedTimeframe = tf }
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(tf, color = if (isSelected) Color.Black else UiColors.TextSecondary, fontWeight = FontWeight.Bold)
-                            }
-                        }
+            Text("ANALISIS ICT", color = UiColors.PrimaryYellow, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            Text("XAUUSD Smart Money Analysis", color = UiColors.TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text("Session otomatis: ${session.name}", color = UiColors.TextSecondary, fontSize = 14.sp)
+        }
+        item {
+            Column(Modifier.fillMaxWidth().background(UiColors.Surface, RoundedCornerShape(16.dp)).padding(20.dp)) {
+                Text("TIMEFRAME", color = UiColors.TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(12.dp))
+                listOf("M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1").chunked(5).forEach { row ->
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { tf -> TimeframeChip(tf, selectedTimeframe == tf) { selectedTimeframe = tf } }
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        timeframes2.forEach { tf ->
-                            val isSelected = tf == selectedTimeframe
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isSelected) UiColors.PrimaryYellow else UiColors.SurfaceLight)
-                                    .clickable { selectedTimeframe = tf }
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(tf, color = if (isSelected) Color.Black else UiColors.TextSecondary, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Text("KILL ZONE / SESI TRADING", fontSize = 12.sp, color = UiColors.TextSecondary, fontWeight = FontWeight.SemiBold)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .border(1.dp, UiColors.SurfaceLight, RoundedCornerShape(8.dp))
-                                .clickable { expandedKillZone = true }
-                                .padding(16.dp)
-                        ) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(selectedKillZone, color = UiColors.TextPrimary)
-                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = UiColors.TextSecondary)
-                            }
-                        }
-                        DropdownMenu(
-                            expanded = expandedKillZone,
-                            onDismissRequest = { expandedKillZone = false },
-                            modifier = Modifier
-                                .fillMaxWidth(0.9f)
-                                .background(UiColors.SurfaceLight)
-                        ) {
-                            killZones.forEach { selectionOption ->
-                                DropdownMenuItem(
-                                    text = { Text(selectionOption, color = UiColors.TextPrimary) },
-                                    onClick = {
-                                        selectedKillZone = selectionOption
-                                        expandedKillZone = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Text("UPLOAD DATA BACKTEST (CSV/TXT) UNTUK TRAINING AI", fontSize = 12.sp, color = UiColors.TextSecondary, fontWeight = FontWeight.SemiBold)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, if (selectedFileName != null) UiColors.BullishGreen else UiColors.SurfaceLight, RoundedCornerShape(8.dp)) 
-                            .clickable { filePickerLauncher.launch("*/*") }
-                            .padding(16.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row {
-                            Icon(if (selectedFileName != null) Icons.Default.CheckCircle else Icons.Default.UploadFile, contentDescription = null, tint = if (selectedFileName != null) UiColors.BullishGreen else UiColors.TextSecondary)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(selectedFileName ?: "Upload hasil backtesting Anda (opsional)", color = if (selectedFileName != null) UiColors.BullishGreen else UiColors.TextSecondary)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Text("CATATAN TAMBAHAN (OPSIONAL)", fontSize = 12.sp, color = UiColors.TextSecondary, fontWeight = FontWeight.SemiBold)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = notes,
-                        onValueChange = { notes = it },
-                        placeholder = { Text("Contoh: harga sudah sweep high kemarin, ada berita NFP hari ini, DSS terbentuk di H1...", color = UiColors.TextSecondary) },
-                        modifier = Modifier.fillMaxWidth().height(120.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedBorderColor = UiColors.SurfaceLight,
-                            focusedBorderColor = UiColors.PrimaryYellow,
-                            unfocusedTextColor = UiColors.TextPrimary,
-                            focusedTextColor = UiColors.TextPrimary,
-                            unfocusedContainerColor = Color.Transparent,
-                            focusedContainerColor = Color.Transparent
-                        ),
-                        shape = RoundedCornerShape(8.dp)
-                    )
-
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Button(
-                        onClick = { viewModel.analyzeIct(selectedTimeframe, selectedKillZone, notes) },
-                        enabled = !isAnalyzing,
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = UiColors.PrimaryYellow, contentColor = Color.Black, disabledContainerColor = UiColors.SurfaceLight),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        if (isAnalyzing) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp), color = UiColors.TextSecondary)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Sedang Menganalisis...", color = UiColors.TextSecondary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        } else {
-                            Icon(Icons.Default.FlashOn, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Analisis ICT Sekarang", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        }
-                    }
+                    Spacer(Modifier.height(8.dp))
                 }
-            }
-        }
-
-        // Error card
-        if (analysisErrorText != null) {
-            item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFF2A1C1C), RoundedCornerShape(16.dp))
-                        .border(1.dp, Color(0xFF4A2B2B), RoundedCornerShape(16.dp))
-                        .padding(20.dp)
+                Spacer(Modifier.height(12.dp))
+                AutoSessionBox(session)
+                Spacer(Modifier.height(16.dp))
+                Button(
+                    onClick = { viewModel.analyzeIct(selectedTimeframe, session.name, "") },
+                    enabled = !isAnalyzing,
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = UiColors.PrimaryYellow, contentColor = Color.Black, disabledContainerColor = UiColors.SurfaceLight),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = UiColors.BearishRed, modifier = Modifier.size(24.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("❌ ANALISIS GAGAL", color = UiColors.BearishRed, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(analysisErrorText ?: "", color = Color(0xFFFF8A80), fontSize = 13.sp)
+                    if (isAnalyzing) { CircularProgressIndicator(Modifier.size(22.dp), color = UiColors.TextSecondary); Spacer(Modifier.width(8.dp)); Text("Menganalisis...") }
+                    else { Icon(Icons.Default.FlashOn, null); Spacer(Modifier.width(8.dp)); Text("Analisis ICT Sekarang", fontWeight = FontWeight.Bold) }
                 }
             }
         }
-
-        // Structured result card
-        if (analysisResultJson != null) {
-            item {
-                val json = try { JSONObject(analysisResultJson!!) } catch (_: Exception) { null }
-                if (json != null) {
-                    val bias = json.optString("bias", "-")
-                    val confidence = json.optInt("confidence_score", 0)
-                    val currentPrice = json.optDouble("current_price", 0.0)
-                    val dailySummary = json.optString("daily_bias_summary", "-")
-                    val ms = json.optJSONObject("market_structure")
-                    val ts = json.optJSONObject("trade_setup")
-                    val isBullish = bias.equals("BULLISH", true)
-                    val biasColor = when {
-                        isBullish -> UiColors.BullishGreen
-                        bias.equals("BEARISH", true) -> UiColors.BearishRed
-                        else -> UiColors.PrimaryYellow
-                    }
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                if (isBullish) Color(0xFF162B1D) else if (bias.equals("BEARISH", true)) Color(0xFF2A1C1C) else UiColors.Surface,
-                                RoundedCornerShape(16.dp)
-                            )
-                            .border(
-                                1.dp,
-                                if (isBullish) Color(0xFF234B2F) else if (bias.equals("BEARISH", true)) Color(0xFF4A2B2B) else UiColors.SurfaceLight,
-                                RoundedCornerShape(16.dp)
-                            )
-                            .padding(20.dp)
-                    ) {
-                        // Header
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.GpsFixed, contentDescription = null, tint = UiColors.PrimaryYellow, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("HASIL ANALISIS ICT", color = UiColors.PrimaryYellow, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Bias & Confidence row
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    if (isBullish) Icons.Default.TrendingUp else Icons.Default.TrendingDown,
-                                    contentDescription = null,
-                                    tint = biasColor,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(bias, color = biasColor, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                            }
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text("Confidence", color = UiColors.TextSecondary, fontSize = 11.sp)
-                                Text("$confidence%", color = UiColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-                        HorizontalDivider(color = UiColors.SurfaceLight)
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Price & Summary
-                        AnalysisRow("Current Price", if (currentPrice > 0) String.format(java.util.Locale.US, "$%.2f", currentPrice) else "-")
-                        AnalysisRow("Daily Bias Summary", dailySummary)
-
-                        Spacer(modifier = Modifier.height(12.dp))
-                        HorizontalDivider(color = UiColors.SurfaceLight)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("MARKET STRUCTURE", color = UiColors.PrimaryYellow, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        AnalysisRow("Trend", ms?.optString("trend", "-") ?: "-")
-                        AnalysisRow("Liquidity", ms?.optString("liquidity", "-") ?: "-")
-                        AnalysisRow("FVG", ms?.optString("fvg", "-") ?: "-")
-                        AnalysisRow("Order Block", ms?.optString("order_block", "-") ?: "-")
-                        AnalysisRow("Premium / Discount", ms?.optString("premium_discount", "-") ?: "-")
-
-                        Spacer(modifier = Modifier.height(12.dp))
-                        HorizontalDivider(color = UiColors.SurfaceLight)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("TRADE SETUP", color = UiColors.PrimaryYellow, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        val setupStatus = ts?.optString("status", "-") ?: "-"
-                        val statusColor = if (setupStatus.equals("valid", true)) UiColors.BullishGreen else UiColors.PrimaryYellow
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Status", color = UiColors.TextSecondary, fontSize = 13.sp)
-                            Text(
-                                setupStatus.uppercase(java.util.Locale.US),
-                                color = statusColor,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        AnalysisRow("Entry Zone", ts?.optString("entry_zone", "-") ?: "-")
-                        AnalysisRow("TP1", formatTradeValue(ts?.opt("tp1")))
-                        AnalysisRow("TP2", formatTradeValue(ts?.opt("tp2")))
-                        AnalysisRow("Stop Loss", formatTradeValue(ts?.opt("stop_loss")))
-                        AnalysisRow("Risk / Reward", ts?.optString("risk_reward", "-") ?: "-")
-                    }
-                }
-            }
-        }
-
-        // History from DB (fallback when no live result)
-        if (analysisResultJson == null && analysisErrorText == null) {
-            val recentAnalysis = ictAnalyses.firstOrNull()
-            if (recentAnalysis != null) {
-                item {
-                    val json = try { JSONObject(recentAnalysis.rawResult) } catch (_: Exception) { null }
-                    if (json != null) {
-                        val bias = json.optString("bias", recentAnalysis.bias)
-                        val confidence = json.optInt("confidence_score", recentAnalysis.confidence)
-                        val currentPrice = json.optDouble("current_price", 0.0)
-                        val ms = json.optJSONObject("market_structure")
-                        val ts = json.optJSONObject("trade_setup")
-                        val isBullish = bias.equals("BULLISH", true)
-                        val biasColor = when {
-                            isBullish -> UiColors.BullishGreen
-                            bias.equals("BEARISH", true) -> UiColors.BearishRed
-                            else -> UiColors.PrimaryYellow
-                        }
-
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(UiColors.Surface, RoundedCornerShape(16.dp))
-                                .border(1.dp, UiColors.SurfaceLight, RoundedCornerShape(16.dp))
-                                .padding(20.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.History, contentDescription = null, tint = UiColors.TextSecondary, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("ANALISIS TERAKHIR", color = UiColors.TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                Spacer(modifier = Modifier.weight(1f))
-                                Text(recentAnalysis.date, color = UiColors.TextSecondary, fontSize = 11.sp)
-                            }
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    if (isBullish) Icons.Default.TrendingUp else Icons.Default.TrendingDown,
-                                    contentDescription = null,
-                                    tint = biasColor,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(bias, color = biasColor, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                                Spacer(modifier = Modifier.width(16.dp))
-                                Text("$confidence%", color = UiColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                            }
-                            if (currentPrice > 0) {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                AnalysisRow("Price", String.format(java.util.Locale.US, "$%.2f", currentPrice))
-                            }
-                            if (ms != null) {
-                                AnalysisRow("Trend", ms.optString("trend", "-"))
-                                AnalysisRow("Liquidity", ms.optString("liquidity", "-"))
-                            }
-                            if (ts != null) {
-                                val status = ts.optString("status", "-")
-                                AnalysisRow("Setup", status.uppercase(java.util.Locale.US))
-                                AnalysisRow("Entry", ts.optString("entry_zone", "-"))
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        item { Spacer(modifier = Modifier.height(24.dp)) }
+        if (error != null) item { ErrorCard(error.orEmpty()) }
+        if (result != null) item { AnalysisResultCard(result.orEmpty()) }
+        item { Spacer(Modifier.height(24.dp)) }
     }
 }
 
 @Composable
 fun JournalTab(viewModel: TradingBotViewModel) {
-    val ictAnalyses by viewModel.ictAnalyses.collectAsState()
-    
-    val total = ictAnalyses.size
-    val bullish = ictAnalyses.count { it.bias.equals("BULLISH", true) }
-    val bearish = ictAnalyses.count { it.bias.equals("BEARISH", true) }
-    
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        item { Spacer(modifier = Modifier.height(8.dp)) }
+    val trades by viewModel.trades.collectAsState()
+    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        item { Spacer(Modifier.height(8.dp)) }
         item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.MenuBook, contentDescription = null, tint = UiColors.PrimaryYellow, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("JURNAL TRADING", color = UiColors.PrimaryYellow, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Riwayat Analisis XAUUSD", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = UiColors.TextPrimary)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text("Seluruh riwayat analisis ICT XAUUSD kamu", fontSize = 14.sp, color = UiColors.TextSecondary)
+            Text("HISTORY TRADE", color = UiColors.PrimaryYellow, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            Text("Riwayat TP / SL XAUUSD", color = UiColors.TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text("Trade baru masuk setelah terminal memberi notifikasi TP atau SL.", color = UiColors.TextSecondary, fontSize = 14.sp)
         }
-
         item {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard(modifier = Modifier.weight(1f), total.toString(), "Total", color = UiColors.PrimaryYellow, alignCenter = true)
-                StatCard(modifier = Modifier.weight(1f), bullish.toString(), "Bullish", color = UiColors.BullishGreen, alignCenter = true)
-                StatCard(modifier = Modifier.weight(1f), bearish.toString(), "Bearish", color = UiColors.BearishRed, alignCenter = true)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                MetricCard(Modifier.weight(1f), trades.size.toString(), "Total", UiColors.PrimaryYellow)
+                MetricCard(Modifier.weight(1f), trades.count { it.result == "WIN" }.toString(), "TP", UiColors.BullishGreen)
+                MetricCard(Modifier.weight(1f), trades.count { it.result == "LOSS" }.toString(), "SL", UiColors.BearishRed)
             }
         }
-
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-                Icon(Icons.Default.FilterAlt, contentDescription = null, tint = UiColors.TextSecondary)
-                Spacer(modifier = Modifier.width(12.dp))
-                FilterChip(text = "ALL", isSelected = true)
-                Spacer(modifier = Modifier.width(8.dp))
-                FilterChip(text = "BULLISH", isSelected = false)
-                Spacer(modifier = Modifier.width(8.dp))
-                FilterChip(text = "BEARISH", isSelected = false)
-                Spacer(modifier = Modifier.width(8.dp))
-                FilterChip(text = "NEUTRAL", isSelected = false)
-                Spacer(modifier = Modifier.weight(1f))
-                Icon(Icons.Default.Sync, contentDescription = null, tint = UiColors.TextSecondary)
-            }
-        }
-
-        // Journal Items
-        if (ictAnalyses.isEmpty()) {
-            item {
-                Text("Belum ada analisis", color = UiColors.TextSecondary, modifier = Modifier.fillMaxWidth().padding(32.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-            }
-        } else {
-            items(ictAnalyses.size) { index ->
-                val it = ictAnalyses[index]
-                JournalCard(
-                    isBullish = it.bias.equals("BULLISH", true),
-                    tf = it.timeframe,
-                    session = it.session,
-                    confidence = "${it.confidence}%",
-                    price = it.price,
-                    date = it.date,
-                    onDelete = { viewModel.deleteIctAnalysis(it.id) }
-                )
-            }
-        }
-        
-        item { Spacer(modifier = Modifier.height(24.dp)) }
-    }
-}
-
-
-@Composable
-fun StatCard(modifier: Modifier = Modifier, value: String, subtitle: String, color: Color, icon: ImageVector? = null, alignCenter: Boolean = false) {
-    Column(
-        modifier = modifier
-            .background(UiColors.Surface, RoundedCornerShape(12.dp))
-            .border(1.dp, UiColors.SurfaceLight, RoundedCornerShape(12.dp))
-            .padding(16.dp),
-        horizontalAlignment = if (alignCenter) Alignment.CenterHorizontally else Alignment.Start
-    ) {
-        if (icon != null) {
-            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-        Text(value, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = color)
-        Text(subtitle, fontSize = 12.sp, color = UiColors.TextSecondary)
-    }
-}
-
-@Composable
-fun SessionRow(name: String, wibText: String, utcText: String) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Column {
-            Text(name, color = UiColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(wibText, color = UiColors.TextSecondary, fontSize = 12.sp)
-        }
-        Text(utcText, color = UiColors.TextSecondary, fontSize = 12.sp)
-    }
-}
-
-@Composable
-fun ConceptCard(modifier: Modifier = Modifier, icon: String, title: String, sub: String) {
-    Column(modifier = modifier
-        .background(UiColors.SurfaceLight, RoundedCornerShape(12.dp))
-        .padding(12.dp)
-    ) {
-        Text(icon, fontSize = 20.sp)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(title, color = UiColors.PrimaryYellow, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(sub, color = UiColors.TextSecondary, fontSize = 10.sp)
-    }
-}
-
-@Composable
-fun RecentAnalysisRow(isBullish: Boolean, tf: String, session: String, confidence: String, date: String) {
-    val color = if (isBullish) UiColors.BullishGreen else UiColors.BearishRed
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(8.dp).background(color, CircleShape))
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Row {
-                    Text(tf, fontWeight = FontWeight.Bold, color = UiColors.TextPrimary, fontSize = 14.sp)
-                    Text(" — ", color = UiColors.TextSecondary, fontSize = 14.sp)
-                    Text(if (isBullish) "BULLISH" else "BEARISH", fontWeight = FontWeight.Bold, color = color, fontSize = 14.sp)
-                }
-                Text(session, color = UiColors.TextSecondary, fontSize = 12.sp)
-            }
-        }
-        Column(horizontalAlignment = Alignment.End) {
-            Text(confidence, fontWeight = FontWeight.Bold, color = UiColors.TextPrimary, fontSize = 14.sp)
-            Text(date, color = UiColors.TextSecondary, fontSize = 12.sp)
-        }
-    }
-}
-
-@Composable
-fun JournalCard(isBullish: Boolean, tf: String, session: String, confidence: String, price: String, date: String, onDelete: (() -> Unit)? = null) {
-    val color = if (isBullish) UiColors.BullishGreen else UiColors.BearishRed
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(UiColors.Surface, RoundedCornerShape(12.dp))
-            .border(1.dp, UiColors.SurfaceLight, RoundedCornerShape(12.dp))
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(8.dp).background(color, CircleShape))
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Row {
-                    Text(if (isBullish) "BULLISH" else "BEARISH", fontWeight = FontWeight.Bold, color = color, fontSize = 14.sp)
-                    Text(" • $tf • $session", color = UiColors.TextSecondary, fontSize = 14.sp)
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(date, color = UiColors.TextSecondary, fontSize = 12.sp)
-            }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(horizontalAlignment = Alignment.End) {
-                Text(confidence, fontWeight = FontWeight.Bold, color = UiColors.TextPrimary, fontSize = 16.sp)
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(price, color = UiColors.TextSecondary, fontSize = 12.sp)
-            }
-            if (onDelete != null) {
-                Spacer(modifier = Modifier.width(16.dp))
-                Icon(
-                    Icons.Default.DeleteOutline, 
-                    contentDescription = "Delete", 
-                    tint = UiColors.TextSecondary, 
-                    modifier = Modifier.size(20.dp).clickable { onDelete() }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun FilterChip(text: String, isSelected: Boolean) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (isSelected) UiColors.PrimaryYellow else UiColors.SurfaceLight)
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .clickable { /* state handling could be added */ }
-    ) {
-        Text(text, color = if (isSelected) Color.Black else UiColors.TextSecondary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SettingsTab(viewModel: TradingBotViewModel) {
-    val savedTwelve = viewModel.settings.twelveApiKey
-    val savedDeepseek = viewModel.settings.deepseekApiKey
-    val keysAlreadySaved = savedTwelve.isNotBlank() && savedDeepseek.isNotBlank()
-
-    var twelveKey by remember { mutableStateOf(savedTwelve) }
-    var deepseekKey by remember { mutableStateOf(savedDeepseek) }
-    var isSaved by remember { mutableStateOf(false) }
-
-    val hasEdited = twelveKey != savedTwelve || deepseekKey != savedDeepseek
-
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        item {
-            Text("API Keys Configuration", color = UiColors.PrimaryYellow, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Kunci rahasia ini disimpan secara aman di memori HP Anda (SharedPreferences).", color = UiColors.TextSecondary, fontSize = 14.sp)
-        }
-
-        item {
-            OutlinedTextField(
-                value = twelveKey,
-                onValueChange = { twelveKey = it; isSaved = false },
-                label = { Text("Twelve Data API Key") },
-                modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = UiColors.TextPrimary,
-                    unfocusedTextColor = UiColors.TextPrimary,
-                    cursorColor = UiColors.PrimaryYellow,
-                    focusedBorderColor = UiColors.PrimaryYellow,
-                    unfocusedBorderColor = UiColors.TextSecondary
-                )
-            )
-        }
-
-        item {
-            OutlinedTextField(
-                value = deepseekKey,
-                onValueChange = { deepseekKey = it; isSaved = false },
-                label = { Text("DeepSeek API Key") },
-                modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = UiColors.TextPrimary,
-                    unfocusedTextColor = UiColors.TextPrimary,
-                    cursorColor = UiColors.PrimaryYellow,
-                    focusedBorderColor = UiColors.PrimaryYellow,
-                    unfocusedBorderColor = UiColors.TextSecondary
-                )
-            )
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(16.dp))
-            when {
-                // Keys saved and not edited -> show "saved" state
-                keysAlreadySaved && !hasEdited && !isSaved -> {
-                    Button(
-                        onClick = { },
-                        enabled = false,
-                        modifier = Modifier.fillMaxWidth().height(50.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            disabledContainerColor = Color(0xFF1B3A2A),
-                            disabledContentColor = UiColors.BullishGreen
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = UiColors.BullishGreen, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("API Keys Tersimpan", color = UiColors.BullishGreen, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("✅ Bot siap digunakan", color = UiColors.BullishGreen, fontSize = 14.sp)
-                }
-                // User edited keys -> show "save changes"
-                hasEdited -> {
-                    Button(
-                        onClick = {
-                            viewModel.saveKeys(twelveKey, deepseekKey)
-                            isSaved = true
-                            viewModel.startBot()
-                        },
-                        modifier = Modifier.fillMaxWidth().height(50.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = UiColors.PrimaryYellow),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("Simpan Perubahan", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    }
-                }
-                // First time or just saved
-                else -> {
-                    Button(
-                        onClick = {
-                            viewModel.saveKeys(twelveKey, deepseekKey)
-                            isSaved = true
-                            viewModel.startBot()
-                        },
-                        modifier = Modifier.fillMaxWidth().height(50.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = UiColors.PrimaryYellow),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("Save & Start Bot", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    }
-                    if (isSaved) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("✅ Tersimpan! Bot mencoba untuk menyala...", color = UiColors.BullishGreen, fontSize = 14.sp)
-                    }
-                }
-            }
-        }
+        if (trades.isEmpty()) item { EmptyCard("Belum ada trade selesai. Setup harus ACTIVE lalu menyentuh TP/SL dulu.") }
+        else trades.forEach { item { TradeHistoryCard(it.type, it.result, it.entryPrice, it.takeProfit, it.stopLoss, it.timestamp) } }
+        item { Spacer(Modifier.height(24.dp)) }
     }
 }
 
 @Composable
 fun TerminalTab(viewModel: TradingBotViewModel) {
     val logs by viewModel.logs.collectAsState()
-    
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
-            .padding(16.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.Terminal, contentDescription = null, tint = UiColors.BullishGreen, modifier = Modifier.size(20.dp))
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("BOT TERMINAL", color = UiColors.BullishGreen, fontSize = 16.sp, fontWeight = FontWeight.Bold, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+    LazyColumn(Modifier.fillMaxSize().background(Color.Black).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Terminal, null, tint = UiColors.BullishGreen)
+                Spacer(Modifier.width(8.dp))
+                Text("BOT TERMINAL", color = UiColors.BullishGreen, fontWeight = FontWeight.Bold, fontSize = 18.sp, letterSpacing = 1.sp)
+            }
+            HorizontalDivider(color = UiColors.SurfaceLight, modifier = Modifier.padding(top = 16.dp))
         }
-        Spacer(modifier = Modifier.height(16.dp))
-        HorizontalDivider(color = UiColors.SurfaceLight)
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
-            items(logs.size) { index ->
-                Text(
-                    text = "> ${logs[index]}",
-                    color = UiColors.BullishGreen,
-                    fontSize = 12.sp,
-                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                    modifier = Modifier.padding(vertical = 4.dp)
-                )
+        logs.forEach { item { Text("> $it", color = UiColors.BullishGreen, fontSize = 13.sp, lineHeight = 22.sp) } }
+    }
+}
+
+@Composable
+fun SettingsTab(viewModel: TradingBotViewModel) {
+    var twelve by remember { mutableStateOf(viewModel.settings.twelveApiKey) }
+    var deepseek by remember { mutableStateOf(viewModel.settings.deepseekApiKey.takeIf { it != "LOCAL_RULE_ENGINE" } ?: "") }
+    LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        item { Text("API Keys Configuration", color = UiColors.PrimaryYellow, fontSize = 24.sp, fontWeight = FontWeight.Bold) }
+        item { ApiField("Twelve Data API Key", twelve) { twelve = it } }
+        item { ApiField("DeepSeek API Key (opsional)", deepseek) { deepseek = it } }
+        item {
+            Button(onClick = { viewModel.saveKeys(twelve, deepseek); viewModel.startBot() }, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = UiColors.PrimaryYellow, contentColor = Color.Black), shape = RoundedCornerShape(24.dp)) {
+                Icon(Icons.Default.Save, null); Spacer(Modifier.width(8.dp)); Text(if (viewModel.settings.areKeysSet()) "API Keys Tersimpan" else "Simpan API Keys", fontWeight = FontWeight.Bold)
             }
         }
     }
 }
 
 @Composable
-fun AnalysisRow(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(label, color = UiColors.TextSecondary, fontSize = 13.sp, modifier = Modifier.weight(0.4f))
-        Text(value, color = UiColors.TextPrimary, fontSize = 13.sp, modifier = Modifier.weight(0.6f), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+fun ApiField(label: String, value: String, onChange: (String) -> Unit) {
+    OutlinedTextField(value = value, onValueChange = onChange, label = { Text(label) }, modifier = Modifier.fillMaxWidth(), colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = UiColors.SurfaceLight, focusedBorderColor = UiColors.PrimaryYellow, unfocusedTextColor = UiColors.TextPrimary, focusedTextColor = UiColors.TextPrimary, unfocusedContainerColor = Color.Transparent, focusedContainerColor = Color.Transparent), shape = RoundedCornerShape(8.dp))
+}
+
+@Composable
+fun TimeframeChip(tf: String, selected: Boolean, onClick: () -> Unit) {
+    Box(Modifier.clip(RoundedCornerShape(8.dp)).background(if (selected) UiColors.PrimaryYellow else UiColors.SurfaceLight).clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
+        Text(tf, color = if (selected) Color.Black else UiColors.TextSecondary, fontWeight = FontWeight.Bold)
     }
 }
 
-private fun formatTradeValue(value: Any?): String {
-    return when (value) {
-        is Number -> {
-            val d = value.toDouble()
-            if (d > 0) String.format(java.util.Locale.US, "%.2f", d) else "-"
+@Composable
+fun AutoSessionBox(session: SessionInfo) {
+    Column(Modifier.fillMaxWidth().border(1.dp, UiColors.SurfaceLight, RoundedCornerShape(8.dp)).padding(14.dp)) {
+        Text("AUTO SESSION", color = UiColors.TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(6.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(session.name, color = if (session.active) UiColors.BullishGreen else UiColors.TextSecondary, fontWeight = FontWeight.Bold)
+            Text(session.utcRange, color = UiColors.TextSecondary)
         }
-        is String -> if (value.isNotBlank()) value else "-"
-        else -> "-"
+        Text("WIB: ${session.wibRange}", color = UiColors.TextSecondary, fontSize = 12.sp)
     }
+}
+
+@Composable
+fun AnalysisResultCard(raw: String) {
+    val json = parseJson(raw) ?: return
+    val bias = json.optString("bias", "-")
+    val confidence = json.optInt("confidence_score", 0)
+    val price = json.optDouble("current_price", 0.0)
+    val ms = json.optJSONObject("market_structure")
+    val ts = json.optJSONObject("trade_setup")
+    val color = when (bias.uppercase(Locale.US)) { "BULLISH" -> UiColors.BullishGreen; "BEARISH" -> UiColors.BearishRed; else -> UiColors.PrimaryYellow }
+    Column(Modifier.fillMaxWidth().background(UiColors.Surface, RoundedCornerShape(16.dp)).border(1.dp, color.copy(alpha = 0.35f), RoundedCornerShape(16.dp)).padding(20.dp)) {
+        Text("HASIL ANALISIS ICT", color = UiColors.PrimaryYellow, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+        Spacer(Modifier.height(16.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text(bias, color = color, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text("$confidence%", color = UiColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(12.dp)); HorizontalDivider(color = UiColors.SurfaceLight); Spacer(Modifier.height(10.dp))
+        AnalysisRow("Current Price", if (price > 0) "$${String.format(Locale.US, "%.2f", price)}" else "-")
+        AnalysisRow("Summary", json.optString("daily_bias_summary", "-"))
+        SectionTitle("MARKET STRUCTURE")
+        AnalysisRow("Trend", ms?.optString("trend", "-") ?: "-")
+        AnalysisRow("BOS", ms?.optString("last_bos", "-") ?: "-")
+        AnalysisRow("CHoCH/MSS", ms?.optString("choch", "-") ?: "-")
+        AnalysisRow("Liquidity", ms?.optString("liquidity", "-") ?: "-")
+        AnalysisRow("FVG", ms?.optString("fvg", "-") ?: "-")
+        AnalysisRow("OB", ms?.optString("order_block", "-") ?: "-")
+        SectionTitle("TRADE SETUP")
+        AnalysisRow("Status", ts?.optString("status", "-")?.uppercase(Locale.US) ?: "-")
+        AnalysisRow("Entry", ts?.optString("entry_zone", "-") ?: "-")
+        AnalysisRow("TP1", formatTradeValue(ts?.opt("tp1")))
+        AnalysisRow("TP2", formatTradeValue(ts?.opt("tp2")))
+        AnalysisRow("SL", formatTradeValue(ts?.opt("stop_loss")))
+        SectionTitle("ICT DETAIL")
+        json.optJSONObject("order_blocks")?.let { AnalysisRow("Bullish OB", it.optString("bullish_ob", "-")); AnalysisRow("Bearish OB", it.optString("bearish_ob", "-")); AnalysisRow("OB Notes", it.optString("description", "-")) }
+        json.optJSONObject("fvg")?.let { AnalysisRow("Bullish FVG", it.optString("bullish_fvg", "-")); AnalysisRow("Bearish FVG", it.optString("bearish_fvg", "-")); AnalysisRow("FVG Notes", it.optString("description", "-")) }
+        json.optJSONObject("premium_discount")?.let { AnalysisRow("Zone", it.optString("current_zone", "-")); AnalysisRow("OTE", it.optString("ote_zone", "-")) }
+    }
+}
+
+@Composable
+fun RecentAnalysesCard(items: List<com.example.data.database.IctAnalysisEntity>) {
+    Column(Modifier.fillMaxWidth().background(UiColors.Surface, RoundedCornerShape(16.dp)).padding(16.dp)) {
+        Text("Recent Analyses", color = UiColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(12.dp))
+        if (items.isEmpty()) Text("Belum ada analisis", color = UiColors.TextSecondary, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+        items.forEach { AnalysisRow("${it.bias} • ${it.timeframe}", "${it.confidence}% • ${it.price}") }
+    }
+}
+
+@Composable
+fun ConceptCard(modifier: Modifier, concept: ConceptInfo) {
+    val statusColor = when (concept.status) { "ACTIVE" -> UiColors.BullishGreen; "CONTEXT" -> UiColors.PrimaryYellow; else -> UiColors.TextSecondary }
+    Column(modifier.background(UiColors.SurfaceLight, RoundedCornerShape(14.dp)).padding(14.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(concept.icon, fontSize = 22.sp)
+            Text(concept.status, color = statusColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(concept.title, color = UiColors.PrimaryYellow, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Text("${concept.status} • ${concept.timeframe}", color = statusColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        Text(concept.value, color = UiColors.TextSecondary, fontSize = 12.sp, lineHeight = 17.sp)
+    }
+}
+
+@Composable
+fun MetricCard(modifier: Modifier, value: String, label: String, color: Color) {
+    Column(modifier.background(UiColors.Surface, RoundedCornerShape(12.dp)).border(1.dp, UiColors.SurfaceLight, RoundedCornerShape(12.dp)).padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(value, color = color, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = UiColors.TextSecondary, fontSize = 12.sp)
+    }
+}
+
+@Composable
+fun ActionCard(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().background(UiColors.Surface, RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(46.dp).background(UiColors.PrimaryYellow, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) { Icon(icon, null, tint = Color.Black) }
+        Spacer(Modifier.width(14.dp))
+        Column { Text(title, color = UiColors.TextPrimary, fontWeight = FontWeight.Bold); Text(subtitle, color = UiColors.TextSecondary, fontSize = 12.sp) }
+    }
+}
+
+@Composable
+fun SessionRowAuto(name: String, utc: String, wib: String, active: Boolean) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Column { Text(name, color = if (active) UiColors.BullishGreen else UiColors.TextPrimary, fontWeight = FontWeight.Bold); Text("WIB: $wib", color = UiColors.TextSecondary, fontSize = 12.sp) }
+        Text(utc, color = UiColors.TextSecondary)
+    }
+}
+
+@Composable
+fun SectionTitle(text: String) { Spacer(Modifier.height(12.dp)); Text(text, color = UiColors.PrimaryYellow, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp); Spacer(Modifier.height(6.dp)) }
+
+@Composable
+fun AnalysisRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = UiColors.TextSecondary, fontSize = 13.sp, modifier = Modifier.weight(0.9f))
+        Text(value, color = UiColors.TextPrimary, fontSize = 13.sp, textAlign = TextAlign.End, modifier = Modifier.weight(1.3f))
+    }
+}
+
+@Composable
+fun ErrorCard(text: String) { Column(Modifier.fillMaxWidth().background(Color(0xFF2A1C1C), RoundedCornerShape(16.dp)).padding(18.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.ErrorOutline, null, tint = UiColors.BearishRed); Spacer(Modifier.width(8.dp)); Text("ANALISIS GAGAL", color = UiColors.BearishRed, fontWeight = FontWeight.Bold) }; Text(text, color = Color(0xFFFF8A80), fontSize = 13.sp) } }
+@Composable
+fun EmptyCard(text: String) { Text(text, color = UiColors.TextSecondary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().background(UiColors.Surface, RoundedCornerShape(16.dp)).padding(24.dp)) }
+
+@Composable
+fun TradeHistoryCard(type: String, result: String, entry: Double, tp: Double, sl: Double, timestamp: Long) {
+    val color = if (result == "WIN") UiColors.BullishGreen else UiColors.BearishRed
+    Column(Modifier.fillMaxWidth().background(UiColors.Surface, RoundedCornerShape(14.dp)).border(1.dp, UiColors.SurfaceLight, RoundedCornerShape(14.dp)).padding(16.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("$type • $result", color = color, fontWeight = FontWeight.Bold); Text(SimpleDateFormat("dd MMM HH:mm", Locale.getDefault()).format(Date(timestamp)), color = UiColors.TextSecondary) }
+        AnalysisRow("Entry", String.format(Locale.US, "%.2f", entry))
+        AnalysisRow("TP", String.format(Locale.US, "%.2f", tp))
+        AnalysisRow("SL", String.format(Locale.US, "%.2f", sl))
+    }
+}
+
+fun parseJson(raw: String): JSONObject? = try { JSONObject(raw) } catch (_: Exception) { null }
+
+fun buildConcepts(json: JSONObject?, timeframe: String, session: SessionInfo): List<ConceptInfo> {
+    val ms = json?.optJSONObject("market_structure")
+    val ob = json?.optJSONObject("order_blocks")
+    val fvg = json?.optJSONObject("fvg")
+    val liq = json?.optJSONObject("liquidity")
+    val pd = json?.optJSONObject("premium_discount")
+    val setup = json?.optJSONObject("trade_setup")
+    return listOf(
+        ConceptInfo("Market Structure", "📐", activeIf(ms?.optString("last_bos") != null && ms.optString("last_bos") != "None"), timeframe, ms?.optString("last_bos", "No BOS") ?: "No data"),
+        ConceptInfo("Order Blocks", "🧱", activeIf(ob?.optString("bullish_ob", "-") != "-" || ob?.optString("bearish_ob", "-") != "-"), timeframe, ob?.optString("description", "No OB") ?: "No data"),
+        ConceptInfo("Fair Value Gaps", "⚖️", activeIf(fvg?.optString("bullish_fvg", "-") != "-" || fvg?.optString("bearish_fvg", "-") != "-"), timeframe, fvg?.optString("description", "No FVG") ?: "No data"),
+        ConceptInfo("Liquidity", "💧", activeIf(liq?.optBoolean("sweep_occurred", false) == true), timeframe, liq?.optString("description", "No sweep") ?: "No data"),
+        ConceptInfo("Premium / Discount", "📏", if (pd != null) "ACTIVE" else "NONE", timeframe, pd?.optString("current_zone", "-")?.plus(" • EQ ${formatTradeValue(pd.opt("equilibrium"))}") ?: "No data"),
+        ConceptInfo("Kill Zones", "🎯", if (session.active) "ACTIVE" else "NONE", "AUTO", "${session.name} • ${session.utcRange}"),
+        ConceptInfo("Trade Setup", "⚡", activeIf(setup?.optString("status", "wait") == "valid"), timeframe, setup?.optString("entry_zone", "No setup") ?: "No data")
+    )
+}
+
+fun activeIf(value: Boolean): String = if (value) "ACTIVE" else "NONE"
+fun formatTradeValue(value: Any?): String = when (value) { is Number -> if (value.toDouble() > 0.0) String.format(Locale.US, "%.2f", value.toDouble()) else "-"; is String -> value; else -> "-" }
+
+fun currentSessionInfo(now: Long): SessionInfo {
+    val all = sessionRows(now)
+    val active = all.firstOrNull { it.active }
+    return active ?: SessionInfo("Off-Session", "Off-Session", "-", "-", false)
+}
+
+fun sessionRows(now: Long): List<SessionInfo> = listOf(
+    buildSession("Asian Kill Zone", "Asia/Tokyo", 9, 0, 12, 0, now),
+    buildSession("London Judas Swing", "Europe/London", 7, 0, 8, 30, now),
+    buildSession("London Open Kill Zone", "Europe/London", 8, 0, 12, 0, now),
+    buildSession("New York Judas Swing", "America/New_York", 8, 0, 9, 30, now),
+    buildSession("New York Open Kill Zone", "America/New_York", 8, 30, 11, 30, now),
+    buildSession("Silver Bullet", "America/New_York", 10, 0, 11, 0, now),
+    buildSession("Swing Session", "America/New_York", 13, 30, 16, 0, now)
+)
+
+fun buildSession(name: String, zoneId: String, sh: Int, sm: Int, eh: Int, em: Int, now: Long): SessionInfo {
+    val zone = TimeZone.getTimeZone(zoneId)
+    val start = Calendar.getInstance(zone).apply { timeInMillis = now; set(Calendar.HOUR_OF_DAY, sh); set(Calendar.MINUTE, sm); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }
+    val end = Calendar.getInstance(zone).apply { timeInMillis = now; set(Calendar.HOUR_OF_DAY, eh); set(Calendar.MINUTE, em); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }
+    if (end.timeInMillis <= start.timeInMillis) end.add(Calendar.DAY_OF_MONTH, 1)
+    val active = now in start.timeInMillis until end.timeInMillis
+    return SessionInfo(name, if (active) name else "Off-Session", formatRange(start.timeInMillis, end.timeInMillis, "UTC"), formatRange(start.timeInMillis, end.timeInMillis, "Asia/Jakarta"), active)
+}
+
+fun formatRange(start: Long, end: Long, zone: String): String {
+    val sdf = SimpleDateFormat("HH:mm", Locale.US).apply { timeZone = TimeZone.getTimeZone(zone) }
+    return "${sdf.format(Date(start))} - ${sdf.format(Date(end))}"
 }
