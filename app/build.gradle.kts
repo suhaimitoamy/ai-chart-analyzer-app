@@ -162,6 +162,24 @@ tasks.named("preBuild") {
       }
     }
 
+    val deepSeekFile = file("src/main/java/com/example/data/network/DeepSeekClient.kt")
+    if (deepSeekFile.exists()) {
+      val target = """package com.example.data.network
+
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+class DeepSeekClient(private val apiKey: String) {
+    suspend fun analyzeChart(prompt: String): String = withContext(Dispatchers.Default) {
+        LocalSmcEngine.compile(prompt)
+    }
+}
+"""
+      if (deepSeekFile.readText() != target) {
+        deepSeekFile.writeText(target)
+      }
+    }
+
     val viewModelFile = file("src/main/java/com/example/ui/dashboard/TradingBotViewModel.kt")
     if (viewModelFile.exists()) {
       val original = viewModelFile.readText()
