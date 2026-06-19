@@ -612,7 +612,7 @@ $candlePack
             }
             
             val profitFactor = if (grossLoss > 0) grossProfit / grossLoss else if (grossProfit > 0) 99.99 else 0.0
-            val avgDrawdown = 12.5 // Simulated historical average drawdown based on SL hit tracking
+            val avgDrawdown = if (losses > 0) grossLoss / losses else 0.0
             
             try {
                 val file = PdfGenerator.createReport(
