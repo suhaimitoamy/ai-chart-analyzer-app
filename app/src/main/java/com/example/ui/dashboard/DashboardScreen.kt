@@ -90,6 +90,19 @@ fun DashboardScreen(viewModel: TradingBotViewModel = viewModel()) {
                     )
                 )
                 NavigationBarItem(
+                    selected = currentTab == "Terminal",
+                    onClick = { currentTab = "Terminal" },
+                    icon = { Icon(Icons.Default.Terminal, contentDescription = null) },
+                    label = { Text("Terminal") },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = UiColors.PrimaryYellow,
+                        unselectedIconColor = UiColors.TextSecondary,
+                        selectedTextColor = UiColors.PrimaryYellow,
+                        unselectedTextColor = UiColors.TextSecondary,
+                        indicatorColor = Color.Transparent
+                    )
+                )
+                NavigationBarItem(
                     selected = currentTab == "Settings",
                     onClick = { currentTab = "Settings" },
                     icon = { Icon(Icons.Default.Settings, contentDescription = null) },
@@ -117,6 +130,7 @@ fun DashboardScreen(viewModel: TradingBotViewModel = viewModel()) {
                 "Dashboard" -> DashboardTab(viewModel = viewModel, onNavigateAnalyze = { currentTab = "Analyze" })
                 "Analyze" -> AnalyzeTab(viewModel)
                 "Journal" -> JournalTab(viewModel)
+                "Terminal" -> TerminalTab(viewModel)
                 "Settings" -> SettingsTab(viewModel)
             }
         }
@@ -773,8 +787,6 @@ fun FilterChip(text: String, isSelected: Boolean) {
 fun SettingsTab(viewModel: TradingBotViewModel) {
     var twelveKey by remember { mutableStateOf(viewModel.settings.twelveApiKey) }
     var deepseekKey by remember { mutableStateOf(viewModel.settings.deepseekApiKey) }
-    var telToken by remember { mutableStateOf(viewModel.settings.telegramBotToken) }
-    var telChatId by remember { mutableStateOf(viewModel.settings.telegramChatId) }
     var isSaved by remember { mutableStateOf(false) }
 
     LazyColumn(
@@ -822,44 +834,11 @@ fun SettingsTab(viewModel: TradingBotViewModel) {
         }
 
         item {
-            OutlinedTextField(
-                value = telToken,
-                onValueChange = { telToken = it },
-                label = { Text("Telegram Bot Token") },
-                modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = UiColors.TextPrimary,
-                    unfocusedTextColor = UiColors.TextPrimary,
-                    cursorColor = UiColors.PrimaryYellow,
-                    focusedBorderColor = UiColors.PrimaryYellow,
-                    unfocusedBorderColor = UiColors.TextSecondary
-                )
-            )
-        }
-
-        item {
-            OutlinedTextField(
-                value = telChatId,
-                onValueChange = { telChatId = it },
-                label = { Text("Telegram Chat ID") },
-                modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = UiColors.TextPrimary,
-                    unfocusedTextColor = UiColors.TextPrimary,
-                    cursorColor = UiColors.PrimaryYellow,
-                    focusedBorderColor = UiColors.PrimaryYellow,
-                    unfocusedBorderColor = UiColors.TextSecondary
-                )
-            )
-        }
-
-        item {
             Spacer(modifier = Modifier.height(16.dp))
             Button(
                 onClick = {
-                    viewModel.saveKeys(twelveKey, deepseekKey, telToken, telChatId)
+                    viewModel.saveKeys(twelveKey, deepseekKey)
                     isSaved = true
-                    // Coba start bot setelah disave
                     viewModel.startBot()
                 },
                 modifier = Modifier.fillMaxWidth().height(50.dp),
@@ -870,6 +849,40 @@ fun SettingsTab(viewModel: TradingBotViewModel) {
             if (isSaved) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("✅ Tersimpan! Bot mencoba untuk menyala...", color = UiColors.BullishGreen, fontSize = 14.sp)
+            }
+        }
+    }
+    }
+}
+
+@Composable
+fun TerminalTab(viewModel: TradingBotViewModel) {
+    val logs by viewModel.logs.collectAsState()
+    
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .padding(16.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Terminal, contentDescription = null, tint = UiColors.BullishGreen, modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("BOT TERMINAL", color = UiColors.BullishGreen, fontSize = 16.sp, fontWeight = FontWeight.Bold, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        HorizontalDivider(color = UiColors.SurfaceLight)
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        LazyColumn(modifier = Modifier.fillMaxSize()) {
+            items(logs.size) { index ->
+                Text(
+                    text = "> ${logs[index]}",
+                    color = UiColors.BullishGreen,
+                    fontSize = 12.sp,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
             }
         }
     }

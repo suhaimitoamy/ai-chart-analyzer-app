@@ -14,16 +14,7 @@ class SettingsManager(context: Context) {
         get() = prefs.getString("DEEPSEEK_API_KEY", "") ?: ""
         set(value) = prefs.edit().putString("DEEPSEEK_API_KEY", value).apply()
 
-    var telegramBotToken: String
-        get() = prefs.getString("TELEGRAM_BOT_TOKEN", "") ?: ""
-        set(value) = prefs.edit().putString("TELEGRAM_BOT_TOKEN", value).apply()
-
-    var telegramChatId: String
-        get() = prefs.getString("TELEGRAM_CHAT_ID", "") ?: ""
-        set(value) = prefs.edit().putString("TELEGRAM_CHAT_ID", value).apply()
-
     fun areKeysSet(): Boolean {
-        return twelveApiKey.isNotBlank() && deepseekApiKey.isNotBlank() && 
-               telegramBotToken.isNotBlank() && telegramChatId.isNotBlank()
+        return twelveApiKey.isNotBlank() && deepseekApiKey.isNotBlank()
     }
 }

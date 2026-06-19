@@ -11,7 +11,6 @@ import com.example.data.database.TradeHistoryEntity
 import com.example.data.database.WalletEntity
 import com.example.data.database.TradingMethodEntity
 import com.example.data.network.DeepSeekClient
-import com.example.data.network.TelegramClient
 import com.example.data.network.TwelveDataClient
 import com.example.data.network.CandleBuilder
 import com.example.data.database.CandleEntity
@@ -25,7 +24,7 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
     val settings = SettingsManager(application)
     
     private var twelveClient: TwelveDataClient? = null
-    private var telClient = TelegramClient("", "")
+    private var aiClient = DeepSeekClient("")
     private var aiClient = DeepSeekClient("")
     private val candleBuilder = CandleBuilder()
 
@@ -72,11 +71,9 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
         _logs.update { (listOf(msg) + it).take(100) }
     }
 
-    fun saveKeys(twelve: String, deepseek: String, telToken: String, telChatId: String) {
+    fun saveKeys(twelve: String, deepseek: String) {
         settings.twelveApiKey = twelve
         settings.deepseekApiKey = deepseek
-        settings.telegramBotToken = telToken
-        settings.telegramChatId = telChatId
     }
 
     fun startBot() {
@@ -88,7 +85,6 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
         }
 
         twelveClient = TwelveDataClient(settings.twelveApiKey)
-        telClient = TelegramClient(settings.telegramBotToken, settings.telegramChatId)
         aiClient = DeepSeekClient(settings.deepseekApiKey)
 
         _botStatus.value = "Running"
@@ -153,8 +149,8 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
                                         Harga saat ini: $price
                                     """.trimIndent()
                                     
-                                    telClient?.sendMessage(msg)
-                                    log("Impulsive move warning sent.")
+                                    log(msg)
+                                    log("Impulsive move warning logged.")
                                 }
                             }
                         }
@@ -163,17 +159,7 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
                 }
             }
             
-            launch {
-                log("Starting Telegram Polling...")
-                while (_botStatus.value == "Running") {
-                    val messages = telClient?.pollUpdates() ?: emptyList()
-                    for (msg in messages) {
-                        handleTelegramMessage(msg)
-                    }
-                    kotlinx.coroutines.delay(3000)
-                }
-            }
-            
+
             // Autonomous Background Scanner Simulation
             launch {
                 log("Starting Autonomous Market Scanner...")
@@ -183,11 +169,11 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
                     step = (step + 1) % 5
                     when (step) {
                         1 -> {
-                            telClient?.sendMessage("🔍 [AUTONOMOUS SCAN] XAUUSD M15\nHarga menyentuh zona Retail Liquidity/IDM di 2030.50. Menunggu konfirmasi Change of Character (CHoCH) untuk entry...")
+                            log("🔍 [AUTONOMOUS SCAN] XAUUSD M15\nHarga menyentuh zona Retail Liquidity/IDM di 2030.50. Menunggu konfirmasi Change of Character (CHoCH) untuk entry...")
                             log("Autonomous step: Sweep Liquidity")
                         }
                         2 -> {
-                            telClient?.sendMessage("✅ [MARKET STRUCTURE SHIFT]\nCHoCH Bullish terkonfirmasi di XAUUSD M15. Fair Value Gap (FVG) terbentuk di 2032.00 - 2033.50. Mempersiapkan pending order Buy Limit.")
+                            log("✅ [MARKET STRUCTURE SHIFT]\nCHoCH Bullish terkonfirmasi di XAUUSD M15. Fair Value Gap (FVG) terbentuk di 2032.00 - 2033.50. Mempersiapkan pending order Buy Limit.")
                             log("Autonomous step: CHoCH Confirmed")
                         }
                         3 -> {
@@ -202,15 +188,15 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
                                 
                                 Konteks: Harga baru saja memitigasi demand zone M15 (Order Block). Bot sekarang dalam posisi aktif.
                             """.trimIndent()
-                            telClient?.sendMessage(signalMessage)
+                            log(signalMessage)
                             log("Autonomous step: Order Triggered")
                         }
                         4 -> {
-                            telClient?.sendMessage("🔔 [UPDATE POSISI]\nXAUUSD bergerak impulsif naik mem-break resisten lokal. Profit berjalan +25 pips (2035.50). Agent otomatis memindahkan Stop Loss ke Breakeven (Entry Price) untuk perlindungan modal.")
+                            log("🔔 [UPDATE POSISI]\nXAUUSD bergerak impulsif naik mem-break resisten lokal. Profit berjalan +25 pips (2035.50). Agent otomatis memindahkan Stop Loss ke Breakeven (Entry Price) untuk perlindungan modal.")
                             log("Autonomous step: SL to BE")
                         }
                         0 -> {
-                            telClient?.sendMessage("🎯 [TAKE PROFIT HIT]\nXAUUSD otomatis ditutup. Harga break 2038.00 (TP1 Hit!).\nWin rate total sementara naik sebesar +0.4%. Mengkalkulasi setup berikutnya...")
+                            log("🎯 [TAKE PROFIT HIT]\nXAUUSD otomatis ditutup. Harga break 2038.00 (TP1 Hit!).\nWin rate total sementara naik sebesar +0.4%. Mengkalkulasi setup berikutnya...")
                             log("Autonomous step: TP Hit")
                             kotlinx.coroutines.delay(15_000) // Wait a bit longer before repeating
                         }
@@ -321,8 +307,8 @@ Berikan output murni format JSON tanpa embel-embel markdown dengan struktur:
                         [INFO] Proses AI Trainer & Brain Draft sedang berjalan di background (Timeout 180s).
                     """.trimIndent()
                     
-                    telClient.sendMessage(aiResultMsg)
-                    log("Backtest Complete. Optimized methods. Sent Result to Telegram")
+                    log(aiResultMsg)
+                    log("Backtest Complete. Optimized methods. Sent Result to Terminal")
                 }
             } catch (e: Exception) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -360,164 +346,11 @@ Berikan output murni format JSON tanpa embel-embel markdown dengan struktur:
                 )
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     log("PDF Report generated: ${file.name}")
-                    telClient.sendMessage("📊 Performance PDF Report generated locally: ${file.name}")
+                    log("📊 Performance PDF Report generated locally: ${file.name}")
                 }
             } catch (e: Exception) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     log("Failed to generate PDF: ${e.message}")
-                }
-            }
-        }
-    }
-
-    private suspend fun handleTelegramMessage(update: JSONObject) {
-        val message = update.optJSONObject("message") ?: return
-        if (message.has("photo")) {
-            log("Received chat chart on Telegram. Analyzing...")
-            telClient.sendMessage("Analisa chart sedang berjalan via TA Engine by Trading Analyze...")
-            val analysis = aiClient.analyzeChart("User just uploaded a chart. Synthesize signals with current tick data. Identify setup for Break and Retest or SMC, and provide exact entry position, Take Profit, and Stop Loss.")
-            telClient.sendMessage("🎯 SETUP FOUND:\n$analysis")
-            log("Sent analysis setup.")
-            
-            // Mock placing a simulated trade
-            val signalMessage = """
-                🔴 XAUUSD BUY - TA METHOD ENGINE
-                Harga: 2034.42
-                Entry: 2034.40 - 2035.00
-                SL: 2032.50
-                TP1: 2038.10
-                TP2: 2040.00
-                Rule: TP1=1R protect, TP2=2R final.
-                Confidence: 95%
-                Pattern: AI_DISCOVERY_BULL_01
-                Method Status: ACTIVE
-                Priority Score: 85.00
-                Method PF: 1.5 | Net P/L: $1200.00
-                Method WR: 68.4% | DD: 15.2%
-                Method Trades: 120 (82W/38L)
-                Alasan: SMC + ICT Momentum: Bullish OB tap with displacement.
-                
-                Learning:
-                TP1 dihitung PARTIAL_WIN, TP2 dihitung WIN.
-                Source: TA METHOD ENGINE
-            """.trimIndent()
-            
-            telClient.sendMessage(signalMessage)
-            log("Sent analysis setup to Telegram.")
-            
-            db.tradeDao().insert(TradeHistoryEntity(
-                pair = "XAU/USD",
-                methodId = 1,
-                type = "BUY",
-                entryPrice = 2034.40,
-                takeProfit = 2038.10,
-                stopLoss = 2032.50,
-                result = "PENDING"
-            ))
-            log("Simulated trade entered.")
-        } else if (message.has("text")) {
-            val text = message.optString("text", "")
-            when {
-                text.startsWith("/help") || text.startsWith("/start") -> {
-                    telClient.sendMessage(
-                        "🧠 Trading Analyze (TA)\n\n" +
-                        "Commands:\n" +
-                        "/signal - cek signal (Local Engine - 0 Token)\n" +
-                        "/ai_review - validasi signal dengan DeepSeek AI\n" +
-                        "/brain - status otak + memory\n" +
-                        "/price - cek harga terbaru\n" +
-                        "/stats - performa trading hari ini\n" +
-                        "/news [teks] - analisa sentimen berita market\n" +
-                        "/ask [tanya] - tanya langsung ke DeepSeek AI"
-                    )
-                }
-                text.startsWith("/price") -> {
-                    telClient.sendMessage("Latest Price: 2034.42 (Simulated)")
-                }
-                text.startsWith("/signal") -> {
-                    val signalMessage = """
-                        🤖 TA LOCAL ENGINE SIGNAL
-                        (0 Token Cost - Rule Based Edge)
-                        
-                        🔴 XAUUSD BUY
-                        Harga: 2034.42
-                        Entry: 2034.40 - 2035.00
-                        SL: 2032.50
-                        TP1: 2038.10
-                        TP2: 2040.00
-                        Confidence: 87%
-                        Source: TA METHOD ENGINE (Smart Money Concepts)
-                        
-                        Note: Sinyal ini dihasilkan oleh Otak Utama (Local Engine) secara gratis berdasarkan indikator teknikal (SMC/Price Action). API DeepSeek tidak dipanggil untuk menghemat token. Gunakan /ai_review jika butuh analisa ekstra dari DeepSeek.
-                    """.trimIndent()
-                    telClient.sendMessage(signalMessage)
-                }
-                text.startsWith("/ai_review") -> {
-                    telClient.sendMessage("🤖 Challenger AI (DeepSeek) dipanggil. Mereview setup teknikal market terakhir...")
-                    val analysis = aiClient.analyzeChart("Jadilah bot validator trading. Terdapat sinyal BUY di XAUUSD pada 2034.42. Analisa secara singkat dan setujui (AGREE) atau tolak (REJECT) berdasarkan sentimen pasar global terkini secara singkat tanpa basa basi.")
-                    telClient.sendMessage("🧠 HASIL REVIEW AI:\n\n$analysis")
-                    log("DeepSeek API called for /ai_review")
-                }
-                text.startsWith("/brain") -> {
-                    telClient.sendMessage("🧠 BRAIN STATUS\nActive Method: SMC + ICT Momentum\nWinrate: 68.4%\nTrades: 120 (82W/38L)")
-                }
-                text.startsWith("/stats") -> {
-                    telClient.sendMessage("Today: 5 signals | Wins: 3 | Losses: 1\nActive: 1 | Protected: 0 | Closed: 4")
-                }
-                text.startsWith("/news") -> {
-                    val newsText = text.substringAfter("/news").trim()
-                    if (newsText.isEmpty()) {
-                        telClient.sendMessage("Mohon sertakan teks beritanya. Contoh: /news NFP data came out higher than expected.")
-                    } else {
-                        telClient.sendMessage("Analisa berita sedang berjalan via TA Engine by Trading Analyze...")
-                        val analysis = aiClient.analyzeChart("Analyze the impact of the following news on XAUUSD and suggest a potential trading plan: $newsText")
-                        telClient.sendMessage("📰 ANALISIS BERITA TA:\n\n$analysis")
-                        log("Sent news analysis to Telegram.")
-                    }
-                }
-                text.startsWith("/ask") -> {
-                    val question = text.substringAfter("/ask").trim()
-                    if (question.isEmpty()) {
-                        telClient.sendMessage("Mohon sertakan pertanyaannya. Contoh: /ask Apa dampak inflasi US tahun ini pada Gold?")
-                    } else {
-                        telClient.sendMessage("🤖 Meneruskan pertanyaan ke DeepSeek AI (Challenger Engine)...")
-                        val analysis = aiClient.analyzeChart(question)
-                        telClient.sendMessage("🧠 JAWABAN AI:\n\n$analysis")
-                        log("DeepSeek API called for /ask")
-                    }
-                }
-                text.startsWith("/status") -> {
-                    telClient.sendMessage("Bot is running. Virtual Balance: \$${wallet.value.balance}")
-                }
-                else -> {
-                    val lowerText = text.lowercase()
-                    val reply = when {
-                        lowerText.contains("kenapa") && (lowerText.contains("sl") || lowerText.contains("loss") || lowerText.contains("rugi")) -> {
-                            "🤖 Agent TA (Local Evaluation):\n\nSinyal sebelumnya terkena Stop Loss (SL) karena imbas dari volatilitas dadakan / 'Stop Hunt' di zona likuiditas retail (Retail Liquidity Sweep). Algoritma SMC mendeteksi manipulasi pasar algoritma institusi yang lebih dalam dari perkiraan sebelum melanjutkan trend utama.\n\n💡 Tindakan Bot: Memperlebar ATR buffer untuk sinyal berikutnya dan menunggu validasi *market structure shift* (MSS) yang lebih kuat."
-                        }
-                        lowerText.contains("buy") || lowerText.contains("sell") || lowerText.contains("enaknya") || lowerText.contains("arah") -> {
-                            "🤖 Agent TA (Local Engine):\n\nBerdasarkan analisa Multi-Timeframe (H1/M15) rule SMC + ICT, posisi harga sedang berada di *Discount Zone* fase akumulasi.\n💡 Saran: Prioritaskan validasi / setup *BUY* di area demand 2030-2035.\n\n(Gunakan /ai_review jika butuh validasi fundamental dari DeepSeek)"
-                        }
-                        lowerText.contains("market") || lowerText.contains("sideways") || lowerText.contains("kondisi") -> {
-                            "🤖 Agent TA (Local Engine):\n\nVolume market saat ini (tick data lokal) termonitor cukup pelan/sideways. Rentang pergerakan ATR (Average True Range) menyempit.\n💡 Saran: Kurangi *lot* trading atau gunakan metode scalping pendek (10-15 pips target)."
-                        }
-                        lowerText.contains("price action") -> {
-                            "🤖 Agent TA (Local Engine):\n\nYa, metode dasar yang ditanamkan (Local Database) mencakup Price Action murni (Candlestick Analysis, S&R, Break & Retest) yang digabungkan sebagai konfirmasi tambahan untuk algoritma SMC (Smart Money Concepts)."
-                        }
-                        lowerText.contains("idm") || (lowerText.contains("induce") && lowerText.contains("ment")) || (lowerText.contains("smc") && lowerText.contains("ict")) -> {
-                            "🤖 Agent TA (Local Engine):\n\nSangat lengkap. Rule SMC + ICT yang digunakan engine ini **sudah mendeteksi pergerakan Inducement (IDM)**. Bot dilatih untuk tidak terjebak di *Smart Money Trap* (SMT) atau Order Block pertama.\n\nFase entry bot:\n1. Identifikasi tren (BOS/CHoCH)\n2. Tunggu retail liquidity (IDM) disapu (Sweep)\n3. Entry di valid Point of Interest (Extreme OB / FVG / Breaker Blok)."
-                        }
-                        lowerText.contains("halo") || lowerText.contains("hi ") || lowerText.contains("hai ") || lowerText.contains("pagi") || lowerText.contains("malam") -> {
-                            "Halo! Saya adalah Agent TA (Local Engine) 👋.\nSaya memonitor market XAUUSD secara offline di device ini.\nAda setup yang mau didiskusikan? Atau ketik /help murni."
-                        }
-                        text.isNotBlank() -> {
-                            "📝 Paham. (Local Engine belum di program membalas kalimat tersebut sepenuhnya).\nCoba tanya dengan keyword spesifik: 'enaknya buy/sell', 'kenapa bisa SL?', 'kondisi market', atau ketik /help."
-                        }
-                        else -> ""
-                    }
-                    if (reply.isNotEmpty()) {
-                        telClient.sendMessage(reply)
-                    }
                 }
             }
         }
