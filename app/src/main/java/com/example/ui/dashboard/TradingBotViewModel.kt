@@ -3,7 +3,6 @@ package com.example.ui.dashboard
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.BuildConfig
 import com.example.data.database.AppDatabase
 import com.example.data.database.SettingsManager
 import com.example.data.database.IctAnalysisEntity
