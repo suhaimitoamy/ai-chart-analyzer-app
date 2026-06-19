@@ -1,123 +1,179 @@
-# AI Chart Analyzer App
+# XAUUSD ICT Chart Analyzer App
 
-Aplikasi Android untuk analisis chart XAU/USD berbasis candle real-time dan rule-based ICT/SMC engine.
+Aplikasi Android untuk analisa chart XAU/USD berbasis konsep ICT / Smart Money Concepts dengan candle real-time, rule-based engine lokal, dan market event feed.
 
-Aplikasi ini tidak bergantung pada Gemini. Analisis utama dibuat secara lokal dari candle yang tersimpan, live tick TwelveData, dan rule engine ICT.
+Aplikasi ini dibuat untuk membantu mapping market secara real-time, bukan untuk simulasi backtest.
 
 ## Fungsi Utama
 
-- Mengambil harga live XAU/USD dari TwelveData WebSocket.
-- Menyimpan candle ke database lokal Room.
-- Membentuk candle multi-timeframe:
-  - M1
-  - M5
-  - M15
-  - M30
-  - H1
-  - H4
-  - D1
-  - W1
-- Mengambil historical candle melalui TwelveData REST API.
-- Menjalankan analisis hanya saat tombol **Analisis ICT Sekarang** ditekan.
-- Menampilkan hasil analisis di dalam aplikasi, bukan hanya di terminal.
-- Menyimpan riwayat hasil analisis ICT.
-- Membuat laporan PDF performa trading lokal.
+- Membaca harga real-time XAU/USD dari Twelve Data
+- Menyimpan candle ke database lokal
+- Membentuk candle multi-timeframe melalui CandleBuilder
+- Analisa ICT hanya berjalan saat tombol **Analisis ICT Sekarang** diklik
+- AI berbayar tidak wajib digunakan karena analisa utama sudah memakai rule-based SMC engine lokal
+- Terminal menampilkan event market secara otomatis
+- Session / killzone otomatis mengikuti timezone dan DST
+- History Trade hanya mencatat setup yang sudah menyentuh TP atau STOP
 
-## Engine Analisis
+## Timeframe
 
-Analisis saat ini memakai local rule-based ICT engine, bukan AI vision dan bukan Gemini.
+Aplikasi mendukung beberapa timeframe:
 
-Engine membaca:
+- M1
+- M5
+- M15
+- M30
+- H1
+- H4
+- D1
+- W1
 
-- Live price dari cache tick terakhir.
-- Candle LTF, MTF, dan HTF.
-- Internal swing dan external swing.
-- BOS / CHoCH / MSS.
-- Fair Value Gap.
-- Liquidity sweep.
-- Qualified Order Block.
-- Premium / Discount.
-- OTE zone.
-- Active POI.
+## Data Candle
 
-## Akurasi Harga
+Saat bot dijalankan, aplikasi akan:
 
-Harga analisis memakai live tick terakhir dari TwelveData jika tersedia.
+1. Mengambil historical candle melalui REST API
+2. Menyimpan candle ke Room Database
+3. Menjalankan WebSocket real-time
+4. Membentuk candle baru dari tick real-time
+5. Menyimpan candle yang sudah close ke database lokal
 
-Jika live tick belum masuk, aplikasi fallback ke candle terakhir dari snapshot.
+Candle tidak dibuat ulang dari screenshot. Candle dibangun dari data harga real-time.
 
-Perbedaan kecil dengan MT5 masih bisa terjadi karena feed broker XAUUSD.sc dan feed TwelveData tidak selalu identik.
+## ICT / SMC Engine
 
-## Deteksi POI
+Engine lokal membaca candle dan melakukan mapping:
 
-### Fair Value Gap
+- Market Structure
+- BOS
+- MSS / CHoCH
+- Liquidity
+- Buy-side Liquidity
+- Sell-side Liquidity
+- Liquidity Sweep
+- Fair Value Gap
+- Order Block
+- Premium / Discount
+- Equilibrium
+- OTE Zone
+- Displacement
+- Trade Setup
 
-FVG dihitung memakai strict 3-candle logic:
+## POI Status
 
-- Bullish FVG: candle kanan low lebih tinggi dari candle kiri high.
-- Bearish FVG: candle kanan high lebih rendah dari candle kiri low.
+POI dibagi menjadi dua status:
 
-Filter tambahan:
+### ACTIVE
 
-- Minimal gap berbasis ATR.
-- Candle tengah harus impulsif.
-- FVG yang sudah filled tidak dianggap active POI.
-- FVG terlalu jauh dari harga live tidak dijadikan POI aktif.
+POI dekat dengan harga live dan masih relevan untuk diperhatikan.
 
-### Liquidity
+### CONTEXT
 
-Liquidity dihitung memakai:
+POI valid tetapi jaraknya masih jauh dari harga live.
 
-- Pivot high dan pivot low.
-- Pivot cluster.
-- ATR tolerance.
-- Wick sweep.
-- Close reclaim.
+POI ini tetap ditampilkan agar user tidak kehilangan konteks market.
 
-### Order Block
+Dengan sistem ini, OB dan FVG tidak langsung dihapus hanya karena jaraknya jauh.
 
-Order Block tidak lagi sekadar candle bullish/bearish terakhir.
+## Terminal Market Event Feed
 
-OB hanya dianggap qualified jika lolos beberapa confluence:
+Terminal tidak hanya menampilkan status bot, tetapi juga event market seperti:
 
-- Ada displacement.
-- Ada opposing candle sebelum displacement.
-- Selaras dengan bias.
-- Dekat dengan harga aktif.
-- Memiliki dukungan sweep, BOS/MSS, FVG, atau premium/discount alignment.
+- Candle closed
+- BOS
+- MSS
+- CISD
+- Liquidity sweep
+- FVG formed
+- Order Block detected
+- Premium / Discount change
+- Displacement candle
+- Setup active
+- TP1 reached
+- TP2 reached
+- STOP reached
 
-Jika OB tidak valid, aplikasi tidak memaksa zona OB muncul.
+Terminal berfungsi sebagai live market journal.
 
-## Alur Kerja Aplikasi
+## Session dan Killzone
 
-```text
-TwelveData REST API → Historical Candle → Database Room
-TwelveData WebSocket → Live Tick → CandleBuilder → Multi-timeframe Candle
-User klik Analisis ICT Sekarang → Local ICT Engine → JSON Result → UI Card
-```
+Session berjalan otomatis berdasarkan waktu real:
+
+- Asian Kill Zone
+- London Judas Swing
+- London Open Kill Zone
+- New York Judas Swing
+- New York Open Kill Zone
+- Silver Bullet
+- Swing Session
+
+Aplikasi menyesuaikan perubahan waktu seperti EST, EDT, BST, dan DST secara otomatis.
+
+## ICT Concepts Covered
+
+Dashboard menampilkan status konsep ICT yang sedang aktif:
+
+- Market Structure
+- Order Block
+- Fair Value Gap
+- Liquidity
+- Premium / Discount
+- Kill Zones
+- Trade Setup
+
+Setiap konsep menampilkan:
+
+- Status aktif / tidak aktif
+- Timeframe
+- Level atau zona harga
+- Ringkasan kondisi market
+
+## History Trade
+
+History Trade hanya mencatat trade setelah setup selesai.
+
+Alurnya:
+
+1. User klik **Analisis ICT Sekarang**
+2. Jika setup valid, Terminal menampilkan **SETUP ACTIVE**
+3. Aplikasi memantau harga live
+4. Jika TP1 tercapai, Terminal memberi notifikasi
+5. Jika TP2 atau STOP tercapai, hasil masuk ke History Trade
+
+History Trade tidak lagi dipakai sebagai jurnal analisis biasa.
 
 ## API Key
 
-Yang wajib:
+Aplikasi membutuhkan Twelve Data API Key untuk data harga real-time.
 
-```text
-TWELVE_API_KEY
-```
+DeepSeek API Key bersifat opsional karena analisa utama sudah memakai rule-based local engine.
 
-DeepSeek key bersifat opsional. Jika kosong, aplikasi tetap memakai local rule engine.
+## Batasan
 
-## Menjalankan Project
+Aplikasi ini bukan robot auto-trade.
 
-1. Buka project di Android Studio atau Antigravity.
-2. Pastikan `.env` tersedia jika project memakai secrets plugin.
-3. Isi TwelveData API key dari menu Settings di aplikasi.
-4. Build dan jalankan APK.
-5. Tekan tombol start bot.
-6. Tunggu log REST candle tersimpan.
-7. Klik **Analisis ICT Sekarang**.
+Aplikasi tidak membuka posisi otomatis.
 
-## Catatan Penting
+Aplikasi hanya membantu:
 
-Aplikasi ini adalah alat bantu mapping chart, bukan sistem auto-entry.
+- Membaca market
+- Menyimpan candle
+- Mapping ICT
+- Memberi informasi event market
+- Menampilkan setup jika valid
+- Mencatat hasil setup berdasarkan harga live
 
-Hasil analisis tetap perlu divalidasi manual sebelum digunakan untuk keputusan trading.
+Keputusan entry tetap berada pada user.
+
+## Status Project
+
+Project ini masih dalam tahap pengembangan.
+
+Fokus utama saat ini:
+
+- Menstabilkan tampilan UI
+- Merapikan dashboard
+- Menyempurnakan detail market event
+- Membuat hasil analisa lebih mudah dibaca
+- Menyamakan pengalaman penggunaan seperti dashboard TradingView-style
+- Memperbaiki bug kecil yang muncul setelah testing di device
