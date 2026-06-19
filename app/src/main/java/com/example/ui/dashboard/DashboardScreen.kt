@@ -88,6 +88,7 @@ fun DashboardScreen(viewModel: TradingBotViewModel = viewModel()) {
                         unselectedTextColor = UiColors.TextSecondary,
                         indicatorColor = Color.Transparent
                     )
+                )
                 NavigationBarItem(
                     selected = currentTab == "Settings",
                     onClick = { currentTab = "Settings" },
@@ -794,8 +795,9 @@ fun SettingsTab(viewModel: TradingBotViewModel) {
                 onValueChange = { twelveKey = it },
                 label = { Text("Twelve Data API Key") },
                 modifier = Modifier.fillMaxWidth(),
-                colors = TextFieldDefaults.outlinedTextFieldColors(
-                    textColor = UiColors.TextPrimary,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = UiColors.TextPrimary,
+                    unfocusedTextColor = UiColors.TextPrimary,
                     cursorColor = UiColors.PrimaryYellow,
                     focusedBorderColor = UiColors.PrimaryYellow,
                     unfocusedBorderColor = UiColors.TextSecondary
@@ -809,8 +811,9 @@ fun SettingsTab(viewModel: TradingBotViewModel) {
                 onValueChange = { deepseekKey = it },
                 label = { Text("DeepSeek API Key") },
                 modifier = Modifier.fillMaxWidth(),
-                colors = TextFieldDefaults.outlinedTextFieldColors(
-                    textColor = UiColors.TextPrimary,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = UiColors.TextPrimary,
+                    unfocusedTextColor = UiColors.TextPrimary,
                     cursorColor = UiColors.PrimaryYellow,
                     focusedBorderColor = UiColors.PrimaryYellow,
                     unfocusedBorderColor = UiColors.TextSecondary
@@ -824,8 +827,9 @@ fun SettingsTab(viewModel: TradingBotViewModel) {
                 onValueChange = { telToken = it },
                 label = { Text("Telegram Bot Token") },
                 modifier = Modifier.fillMaxWidth(),
-                colors = TextFieldDefaults.outlinedTextFieldColors(
-                    textColor = UiColors.TextPrimary,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = UiColors.TextPrimary,
+                    unfocusedTextColor = UiColors.TextPrimary,
                     cursorColor = UiColors.PrimaryYellow,
                     focusedBorderColor = UiColors.PrimaryYellow,
                     unfocusedBorderColor = UiColors.TextSecondary
@@ -839,8 +843,9 @@ fun SettingsTab(viewModel: TradingBotViewModel) {
                 onValueChange = { telChatId = it },
                 label = { Text("Telegram Chat ID") },
                 modifier = Modifier.fillMaxWidth(),
-                colors = TextFieldDefaults.outlinedTextFieldColors(
-                    textColor = UiColors.TextPrimary,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = UiColors.TextPrimary,
+                    unfocusedTextColor = UiColors.TextPrimary,
                     cursorColor = UiColors.PrimaryYellow,
                     focusedBorderColor = UiColors.PrimaryYellow,
                     unfocusedBorderColor = UiColors.TextSecondary
