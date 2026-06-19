@@ -62,7 +62,7 @@ tasks.named("preBuild") {
     val dashboardFile = file("src/main/java/com/example/ui/dashboard/DashboardScreen.kt")
     if (dashboardFile.exists()) {
       val original = dashboardFile.readText()
-      val patched = original
+      var patched = original
         .replace(
           """LaunchedEffect(Unit) {
         viewModel.startBot()
@@ -87,7 +87,9 @@ tasks.named("preBuild") {
           """val killZones = listOf("Asian Kill Zone", "London Open Kill Zone", "New York Kill Zone", "Silver Bullet")""",
           """val killZones = listOf("Asian Kill Zone", "London Open Kill Zone", "London Close Kill Zone", "New York Open Kill Zone", "Silver Bullet (10:00-11:00 NY)", "Di Luar Sesi")"""
         )
-        .replace(
+
+      if (!patched.contains("ICT DETAIL")) {
+        patched = patched.replace(
           """AnalysisRow("Risk / Reward", ts?.optString("risk_reward", "-") ?: "-")""",
           """AnalysisRow("Risk / Reward", ts?.optString("risk_reward", "-") ?: "-")
                         AnalysisRow("Invalidation", ts?.optString("invalidation", "-") ?: "-")
@@ -142,6 +144,8 @@ tasks.named("preBuild") {
                             }
                         }"""
         )
+      }
+
       if (patched != original) {
         dashboardFile.writeText(patched)
       }
@@ -161,13 +165,15 @@ tasks.named("preBuild") {
     val viewModelFile = file("src/main/java/com/example/ui/dashboard/TradingBotViewModel.kt")
     if (viewModelFile.exists()) {
       val original = viewModelFile.readText()
-      val patched = original
+      var patched = original
         .replace("\"M1\", \"M5\", \"M15\", \"H1\", \"H4\", \"D1\"", "\"M1\", \"M5\", \"M15\", \"M30\", \"H1\", \"H4\", \"D1\", \"W1\"")
         .replace("\"M15\" -> 900L\n            \"H1\"", "\"M15\" -> 900L\n            \"M30\" -> 1800L\n            \"H1\"")
         .replace("\"D1\" -> 86400L", "\"D1\" -> 86400L\n            \"W1\" -> 604800L")
         .replace("""4. Berikan setup hanya jika valid. Jika belum valid, tulis wait.""", """4. Berikan setup hanya jika valid. Jika belum valid, tulis wait.
 5. Sertakan market_structure, order_blocks, fvg, liquidity, premium_discount, trade_setup, key_notes, dan warnings.""")
-        .replace("""    "risk_reward": "rasio"
+
+      if (!patched.contains("\"order_blocks\"")) {
+        patched = patched.replace("""    "risk_reward": "rasio"
   },
   "market_structure": {
     "trend": "Bullish/Bearish/Range",
@@ -213,6 +219,8 @@ tasks.named("preBuild") {
   "key_notes": ["catatan penting"],
   "warnings": ["peringatan risiko"]""
         )
+      }
+
       if (patched != original) {
         viewModelFile.writeText(patched)
       }
@@ -242,7 +250,6 @@ dependencies {
   implementation(libs.androidx.lifecycle.runtime.compose)
   implementation(libs.androidx.lifecycle.runtime.ktx)
   implementation(libs.androidx.lifecycle.viewmodel.compose)
-  implementation(libs.androidx.navigation.compose)
   implementation(libs.androidx.navigation.compose)
   implementation(libs.androidx.room.ktx)
   implementation(libs.androidx.room.runtime)
