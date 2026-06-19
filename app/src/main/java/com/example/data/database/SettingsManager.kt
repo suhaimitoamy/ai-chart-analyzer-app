@@ -15,6 +15,6 @@ class SettingsManager(context: Context) {
         set(value) = prefs.edit().putString("DEEPSEEK_API_KEY", value).apply()
 
     fun areKeysSet(): Boolean {
-        return twelveApiKey.isNotBlank() && deepseekApiKey.isNotBlank()
+        return twelveApiKey.isNotBlank()
     }
 }
