@@ -57,7 +57,7 @@ class DeepSeekClient(private val apiKey: String) {
         val activeBullOb = bullOb?.takeIf { it.active }
         val activeBearOb = bearOb?.takeIf { it.active }
         val setup = setupJson(bias, currentZone, price, sellSide, buySide, rangeLow, rangeHigh, atr, activeBullFvg, activeBearFvg, activeBullOb, activeBearOb)
-        val confidence = (45 + if (sweep) 10 else 0 + if (setup.optString("status") == "valid") 20 else 0 + if (listOf(activeBullFvg, activeBearFvg, activeBullOb, activeBearOb).any { it != null }) 15 else 0).coerceIn(25, 90)
+        val confidence = (45 + (if (sweep) 10 else 0) + (if (setup.optString("status") == "valid") 20 else 0) + (if (listOfNotNull(activeBullFvg, activeBearFvg, activeBullOb, activeBearOb).isNotEmpty()) 15 else 0)).coerceIn(25, 90)
         val fvgDesc = listOfNotNull(bullFvg?.let { "Bullish FVG ${it.label()}" }, bearFvg?.let { "Bearish FVG ${it.label()}" }).joinToString(" | ").ifBlank { "Tidak ada FVG" }
         val obDesc = listOfNotNull(bullOb?.let { "Bullish OB ${it.label()}" }, bearOb?.let { "Bearish OB ${it.label()}" }).joinToString(" | ").ifBlank { "Tidak ada OB" }
 

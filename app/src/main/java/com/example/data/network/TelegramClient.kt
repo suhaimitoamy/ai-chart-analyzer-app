@@ -6,7 +6,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.io.IOException
 
 class TelegramClient(private val botToken: String, private val chatId: String) {
     private val client = OkHttpClient()

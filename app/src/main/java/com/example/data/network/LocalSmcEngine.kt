@@ -171,7 +171,7 @@ object LocalSmcEngine {
                 val high = max(ph[idx], pl[idx])
                 val mitigated = bars.drop(idx + 1).any { if (e.side == "bullish") it.low < low else it.high > high }
                 val active = !mitigated && abs(((low + high) / 2.0) - price) <= maxDistance
-                val score = (45 + fresh(idx, bars.lastIndex) + if (e.tag == "CHoCH") 15 else 5 + if (active) 20 else 0).coerceIn(0, 95)
+                val score = (45 + fresh(idx, bars.lastIndex) + (if (e.tag == "CHoCH") 15 else 5) + (if (active) 20 else 0)).coerceIn(0, 95)
                 zones.add(Zone(e.side, low, high, score, active, "${e.tag} order block", idx))
             }
         }

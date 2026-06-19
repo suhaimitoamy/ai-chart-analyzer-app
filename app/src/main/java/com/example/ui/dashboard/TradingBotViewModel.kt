@@ -53,7 +53,11 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    fun log(msg: String) { _logs.update { (listOf(msg) + it).take(150) } }
+    fun log(msg: String) { 
+        val prefix = "[${java.text.SimpleDateFormat("HH:mm", Locale.getDefault()).format(java.util.Date())}]"
+        val txt = if (msg.startsWith("[")) msg else "$prefix $msg"
+        _logs.update { (listOf(txt) + it).take(150) } 
+    }
     fun saveKeys(twelve: String, deepseek: String) { settings.twelveApiKey = twelve; settings.deepseekApiKey = deepseek }
     fun stopBot() { _botStatus.value = "Disconnected"; twelveClient?.disconnect(); log("Bot stopped.") }
     fun deleteIctAnalysis(id: Int) { viewModelScope.launch { db.ictAnalysisDao().delete(id) } }
@@ -77,7 +81,7 @@ class TradingBotViewModel(application: Application) : AndroidViewModel(applicati
                     db.candleDao().insert(entity)
                     scanAndLogMarketEvents(candle.timeframe, candle.close)
                     if (candle.timeframe != "M1") log("${candle.timeframe} closed. C:${formatPrice(candle.close)} Ticks:${candle.tickCount}")
-                    else { m1ClosedCount++; if (m1ClosedCount % 5 == 0) log("M1 #$m1ClosedCount closed. C:${formatPrice(candle.close)}") }
+                    else { m1ClosedCount++ }
                 }
             }
             launch {
