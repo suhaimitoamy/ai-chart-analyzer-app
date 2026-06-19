@@ -15,7 +15,8 @@ class DeepSeekClient(private val apiKey: String) {
     private fun compileLocalAnalysis(prompt: String): String {
         val timeframe = readText(prompt, "Requested timeframe") ?: "M1"
         val session = readText(prompt, "Session") ?: "-"
-        val price = readNumber(prompt, "Current price") ?: 0.0
+        val promptPrice = readNumber(prompt, "Current price") ?: 0.0
+        val price = MarketPriceCache.latestPrice ?: promptPrice
         val rawBias = (readText(prompt, "Market bias") ?: "neutral").lowercase(Locale.US)
         val phase = readText(prompt, "Market phase") ?: "RANGING"
         val momentum = (readText(prompt, "Momentum") ?: "neutral").lowercase(Locale.US)
@@ -69,9 +70,9 @@ class DeepSeekClient(private val apiKey: String) {
             else -> "equilibrium"
         }
         val summary = when (bias) {
-            "BULLISH" -> "Market dalam fase $phase dengan bias bullish. Harga berada di zona $zoneText, support aktif berada di ${fmt(support)}, resistance terdekat berada di ${fmt(resistance)}, dan skenario buy hanya valid setelah retest."
-            "BEARISH" -> "Market dalam fase $phase dengan bias bearish. Harga berada di zona $zoneText, resistance aktif berada di ${fmt(resistance)}, support terdekat berada di ${fmt(support)}, dan skenario sell hanya valid setelah retest."
-            else -> "Market dalam fase $phase dengan bias netral. Harga berada di zona $zoneText dan belum ada konfirmasi struktur yang cukup kuat untuk entry agresif."
+            "BULLISH" -> "Market dalam fase $phase dengan bias bullish. Harga live berada di zona $zoneText, support aktif berada di ${fmt(support)}, resistance terdekat berada di ${fmt(resistance)}, dan skenario buy hanya valid setelah retest."
+            "BEARISH" -> "Market dalam fase $phase dengan bias bearish. Harga live berada di zona $zoneText, resistance aktif berada di ${fmt(resistance)}, support terdekat berada di ${fmt(support)}, dan skenario sell hanya valid setelah retest."
+            else -> "Market dalam fase $phase dengan bias netral. Harga live berada di zona $zoneText dan belum ada konfirmasi struktur yang cukup kuat untuk entry agresif."
         }
 
         return JSONObject()
@@ -91,7 +92,7 @@ class DeepSeekClient(private val apiKey: String) {
                 .put("liquidity", liquidity)
                 .put("fvg", if (bullishFvg != "-" || bearishFvg != "-") fvgText else "Tidak ada FVG aktif dekat harga")
                 .put("order_block", if (bullishOb != "-" || bearishOb != "-") obText else "Tidak ada OB aktif dekat harga")
-                .put("premium_discount", "Harga berada di zona $currentZone dengan equilibrium ${fmt(equilibrium)}"))
+                .put("premium_discount", "Harga live berada di zona $currentZone dengan equilibrium ${fmt(equilibrium)}"))
             .put("order_blocks", JSONObject()
                 .put("bullish_ob", bullishOb)
                 .put("bearish_ob", bearishOb)
@@ -114,9 +115,11 @@ class DeepSeekClient(private val apiKey: String) {
                     else -> "Belum ada OTE valid"
                 }))
             .put("key_notes", JSONArray()
+                .put("Current price memakai cache live tick TwelveData jika tersedia.")
                 .put("Level jauh dari harga aktif otomatis diabaikan agar tidak ngaco.")
                 .put("Analisis dibuat oleh local rule engine, bukan DeepSeek API."))
             .put("warnings", JSONArray().apply {
+                if (MarketPriceCache.latestPrice == null) put("Live tick belum masuk; current price memakai candle terakhir dari snapshot.")
                 if (choppy) put("Market choppy; tunggu retest yang jelas.")
                 if (setup.optString("status") == "wait") put("Setup masih WAIT; tunggu konfirmasi tambahan.")
                 if (abs(price - equilibrium) < atr * 0.25) put("Harga dekat equilibrium; area ini rawan noise.")
@@ -162,12 +165,12 @@ class DeepSeekClient(private val apiKey: String) {
     }
 
     private fun clampResistance(raw: Double, price: Double, high60: Double, maxDistance: Double): Double {
-        val fallback = if (high60 > price) high60 else price + maxDistance
+        val fallback = if (high60 > price && abs(high60 - price) <= maxDistance * 1.5) high60 else price + maxDistance
         return if (raw > price && abs(raw - price) <= maxDistance * 1.5) raw else fallback
     }
 
     private fun clampSupport(raw: Double, price: Double, low60: Double, maxDistance: Double): Double {
-        val fallback = if (low60 < price) low60 else price - maxDistance
+        val fallback = if (low60 < price && abs(price - low60) <= maxDistance * 1.5) low60 else price - maxDistance
         return if (raw < price && abs(raw - price) <= maxDistance * 1.5) raw else fallback
     }
 
