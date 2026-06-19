@@ -173,7 +173,8 @@ tasks.named("preBuild") {
 5. Sertakan market_structure, order_blocks, fvg, liquidity, premium_discount, trade_setup, key_notes, dan warnings.""")
 
       if (!patched.contains("\"order_blocks\"")) {
-        patched = patched.replace("""    "risk_reward": "rasio"
+        val oldSchema = """
+    "risk_reward": "rasio"
   },
   "market_structure": {
     "trend": "Bullish/Bearish/Range",
@@ -181,7 +182,10 @@ tasks.named("preBuild") {
     "fvg": "ringkasan",
     "order_block": "ringkasan",
     "premium_discount": "ringkasan"
-  }""", """    "risk_reward": "rasio",
+  }
+""".trimIndent()
+        val newSchema = """
+    "risk_reward": "rasio",
     "invalidation": "level invalidasi"
   },
   "market_structure": {
@@ -217,8 +221,9 @@ tasks.named("preBuild") {
     "ote_zone": "62-79% zone"
   },
   "key_notes": ["catatan penting"],
-  "warnings": ["peringatan risiko"]""
-        )
+  "warnings": ["peringatan risiko"]
+""".trimIndent()
+        patched = patched.replace(oldSchema, newSchema)
       }
 
       if (patched != original) {
@@ -228,8 +233,6 @@ tasks.named("preBuild") {
   }
 }
 
-// Some unused dependencies are commented out below instead of being removed.
-// This makes it easy to add them back in the future if needed.
 dependencies {
   implementation(platform(libs.androidx.compose.bom))
   implementation(platform(libs.firebase.bom))
