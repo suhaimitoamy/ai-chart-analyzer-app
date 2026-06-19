@@ -5,7 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [TradingMethodEntity::class, TradeHistoryEntity::class, WalletEntity::class, IctAnalysisEntity::class, CandleEntity::class], version = 3, exportSchema = false)
+@Database(entities = [TradingMethodEntity::class, TradeHistoryEntity::class, WalletEntity::class, IctAnalysisEntity::class, CandleEntity::class], version = 4, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun methodDao(): TradingMethodDao
     abstract fun tradeDao(): TradeHistoryDao
