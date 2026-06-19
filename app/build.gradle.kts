@@ -180,6 +180,17 @@ class DeepSeekClient(private val apiKey: String) {
       }
     }
 
+    val manifestFile = file("src/main/AndroidManifest.xml")
+    if (manifestFile.exists()) {
+      val originalManifest = manifestFile.readText()
+      val patchedManifest = originalManifest
+        .replace("android:icon=\"@mipmap/ic_launcher\"", "android:icon=\"@drawable/ic_launcher_xau\"")
+        .replace("android:roundIcon=\"@mipmap/ic_launcher_round\"", "android:roundIcon=\"@drawable/ic_launcher_xau\"")
+      if (patchedManifest != originalManifest) {
+        manifestFile.writeText(patchedManifest)
+      }
+    }
+
     val viewModelFile = file("src/main/java/com/example/ui/dashboard/TradingBotViewModel.kt")
     if (viewModelFile.exists()) {
       val original = viewModelFile.readText()
