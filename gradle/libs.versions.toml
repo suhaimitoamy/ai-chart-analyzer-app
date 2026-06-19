@@ -8,9 +8,9 @@ lifecycleRuntimeKtx = "2.8.7"
 lifecycleViewmodelCompose = "2.8.7"
 lifecycleRuntimeCompose = "2.8.7"
 activityCompose = "1.10.1"
-kotlin = "2.0.0"
+kotlin = "2.2.10"
 composeBom = "2024.09.00"
-googleDevtoolsKsp = "2.0.0-1.0.21"
+googleDevtoolsKsp = "2.3.5"
 navigationCompose = "2.8.9"
 roomRuntime = "2.7.0"
 roomKtx = "2.7.0"
@@ -90,7 +90,6 @@ firebase-ai = { group = "com.google.firebase", name = "firebase-ai" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 google-devtools-ksp = { id = "com.google.devtools.ksp", version.ref = "googleDevtoolsKsp" }
 roborazzi = { id = "io.github.takahirom.roborazzi", version.ref = "roborazzi" }
