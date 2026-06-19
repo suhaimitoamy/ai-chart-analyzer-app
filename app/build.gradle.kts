@@ -52,8 +52,6 @@ android {
   testOptions { unitTests { isIncludeAndroidResources = true } }
 }
 
-// Configure the Secrets Gradle Plugin to use .env and .env.example files
-// to match the convention used in Web projects.
 secrets {
   propertiesFileName = ".env"
   defaultPropertiesFileName = ".env.example"
@@ -85,8 +83,138 @@ tasks.named("preBuild") {
           """Text("✅ Tersimpan! Bot mencoba untuk menyala...", color = UiColors.BullishGreen, fontSize = 14.sp)""",
           """Text("✅ API Keys tersimpan. CandleBuilder akan berjalan setelah key valid.", color = UiColors.BullishGreen, fontSize = 14.sp)"""
         )
+        .replace(
+          """val killZones = listOf("Asian Kill Zone", "London Open Kill Zone", "New York Kill Zone", "Silver Bullet")""",
+          """val killZones = listOf("Asian Kill Zone", "London Open Kill Zone", "London Close Kill Zone", "New York Open Kill Zone", "Silver Bullet (10:00-11:00 NY)", "Di Luar Sesi")"""
+        )
+        .replace(
+          """AnalysisRow("Risk / Reward", ts?.optString("risk_reward", "-") ?: "-")""",
+          """AnalysisRow("Risk / Reward", ts?.optString("risk_reward", "-") ?: "-")
+                        AnalysisRow("Invalidation", ts?.optString("invalidation", "-") ?: "-")
+
+                        val orderBlocks = json.optJSONObject("order_blocks")
+                        val fvgObject = json.optJSONObject("fvg")
+                        val liquidityObject = json.optJSONObject("liquidity")
+                        val pdObject = json.optJSONObject("premium_discount")
+                        if (orderBlocks != null || fvgObject != null || liquidityObject != null || pdObject != null) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            HorizontalDivider(color = UiColors.SurfaceLight)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("ICT DETAIL", color = UiColors.PrimaryYellow, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            orderBlocks?.let {
+                                AnalysisRow("Bullish OB", it.optString("bullish_ob", "-"))
+                                AnalysisRow("Bearish OB", it.optString("bearish_ob", "-"))
+                                AnalysisRow("OB Notes", it.optString("description", "-"))
+                            }
+                            fvgObject?.let {
+                                AnalysisRow("Bullish FVG", it.optString("bullish_fvg", "-"))
+                                AnalysisRow("Bearish FVG", it.optString("bearish_fvg", "-"))
+                                AnalysisRow("FVG Notes", it.optString("description", "-"))
+                            }
+                            liquidityObject?.let {
+                                AnalysisRow("Buy Side", it.optString("buy_side", "-"))
+                                AnalysisRow("Sell Side", it.optString("sell_side", "-"))
+                                AnalysisRow("Sweep", if (it.optBoolean("sweep_occurred", false)) "YES" else "NO")
+                                AnalysisRow("Liquidity Notes", it.optString("description", "-"))
+                            }
+                            pdObject?.let {
+                                AnalysisRow("Equilibrium", formatTradeValue(it.opt("equilibrium")))
+                                AnalysisRow("Current Zone", it.optString("current_zone", "-"))
+                                AnalysisRow("OTE Zone", it.optString("ote_zone", "-"))
+                            }
+                        }
+
+                        val keyNotes = json.optJSONArray("key_notes")
+                        if (keyNotes != null && keyNotes.length() > 0) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text("KEY NOTES", color = UiColors.PrimaryYellow, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            for (i in 0 until keyNotes.length()) {
+                                AnalysisRow("Note ${'$'}{i + 1}", keyNotes.optString(i, "-"))
+                            }
+                        }
+                        val warnings = json.optJSONArray("warnings")
+                        if (warnings != null && warnings.length() > 0) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("WARNINGS", color = UiColors.BearishRed, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            for (i in 0 until warnings.length()) {
+                                AnalysisRow("Warning ${'$'}{i + 1}", warnings.optString(i, "-"))
+                            }
+                        }"""
+        )
       if (patched != original) {
         dashboardFile.writeText(patched)
+      }
+    }
+
+    val candleBuilderFile = file("src/main/java/com/example/data/network/CandleBuilder.kt")
+    if (candleBuilderFile.exists()) {
+      val original = candleBuilderFile.readText()
+      val patched = original
+        .replace("\"M15\" to 900L,\n        \"H1\"", "\"M15\" to 900L,\n        \"M30\" to 1800L,\n        \"H1\"")
+        .replace("\"D1\" to 86400L", "\"D1\" to 86400L,\n        \"W1\" to 604800L")
+      if (patched != original) {
+        candleBuilderFile.writeText(patched)
+      }
+    }
+
+    val viewModelFile = file("src/main/java/com/example/ui/dashboard/TradingBotViewModel.kt")
+    if (viewModelFile.exists()) {
+      val original = viewModelFile.readText()
+      val patched = original
+        .replace("\"M1\", \"M5\", \"M15\", \"H1\", \"H4\", \"D1\"", "\"M1\", \"M5\", \"M15\", \"M30\", \"H1\", \"H4\", \"D1\", \"W1\"")
+        .replace("\"M15\" -> 900L\n            \"H1\"", "\"M15\" -> 900L\n            \"M30\" -> 1800L\n            \"H1\"")
+        .replace("\"D1\" -> 86400L", "\"D1\" -> 86400L\n            \"W1\" -> 604800L")
+        .replace("""4. Berikan setup hanya jika valid. Jika belum valid, tulis wait.""", """4. Berikan setup hanya jika valid. Jika belum valid, tulis wait.
+5. Sertakan market_structure, order_blocks, fvg, liquidity, premium_discount, trade_setup, key_notes, dan warnings.""")
+        .replace("""    "risk_reward": "rasio"
+  },
+  "market_structure": {
+    "trend": "Bullish/Bearish/Range",
+    "liquidity": "ringkasan",
+    "fvg": "ringkasan",
+    "order_block": "ringkasan",
+    "premium_discount": "ringkasan"
+  }""", """    "risk_reward": "rasio",
+    "invalidation": "level invalidasi"
+  },
+  "market_structure": {
+    "trend": "Bullish/Bearish/Range",
+    "last_bos": "BOS terakhir",
+    "choch": "CHoCH/MSS terakhir",
+    "swing_high": 0.0,
+    "swing_low": 0.0,
+    "liquidity": "ringkasan",
+    "fvg": "ringkasan",
+    "order_block": "ringkasan",
+    "premium_discount": "ringkasan"
+  },
+  "order_blocks": {
+    "bullish_ob": "area bullish OB",
+    "bearish_ob": "area bearish OB",
+    "description": "catatan OB"
+  },
+  "fvg": {
+    "bullish_fvg": "area bullish FVG",
+    "bearish_fvg": "area bearish FVG",
+    "description": "catatan FVG"
+  },
+  "liquidity": {
+    "buy_side": "BSL terdekat",
+    "sell_side": "SSL terdekat",
+    "sweep_occurred": false,
+    "description": "catatan liquidity"
+  },
+  "premium_discount": {
+    "equilibrium": 0.0,
+    "current_zone": "PREMIUM/DISCOUNT/EQUILIBRIUM",
+    "ote_zone": "62-79% zone"
+  },
+  "key_notes": ["catatan penting"],
+  "warnings": ["peringatan risiko"]""
+        )
+      if (patched != original) {
+        viewModelFile.writeText(patched)
       }
     }
   }
@@ -114,6 +242,7 @@ dependencies {
   implementation(libs.androidx.lifecycle.runtime.compose)
   implementation(libs.androidx.lifecycle.runtime.ktx)
   implementation(libs.androidx.lifecycle.viewmodel.compose)
+  implementation(libs.androidx.navigation.compose)
   implementation(libs.androidx.navigation.compose)
   implementation(libs.androidx.room.ktx)
   implementation(libs.androidx.room.runtime)
