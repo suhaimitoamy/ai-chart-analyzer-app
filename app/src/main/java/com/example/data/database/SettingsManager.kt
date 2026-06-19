@@ -11,7 +11,10 @@ class SettingsManager(context: Context) {
         set(value) = prefs.edit().putString("TWELVE_API_KEY", value).apply()
 
     var deepseekApiKey: String
-        get() = prefs.getString("DEEPSEEK_API_KEY", "") ?: ""
+        get() {
+            val saved = prefs.getString("DEEPSEEK_API_KEY", "") ?: ""
+            return saved.ifBlank { "LOCAL_RULE_ENGINE" }
+        }
         set(value) = prefs.edit().putString("DEEPSEEK_API_KEY", value).apply()
 
     fun areKeysSet(): Boolean {
