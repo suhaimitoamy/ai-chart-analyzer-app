@@ -7,51 +7,66 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.IOException
 
 class DeepSeekClient(private val apiKey: String) {
     private val client = OkHttpClient()
 
     suspend fun analyzeChart(prompt: String): String = withContext(Dispatchers.IO) {
-        if(apiKey.isBlank()) return@withContext "API key not found."
+        if (apiKey.isBlank()) return@withContext "DeepSeek API key kosong. Isi API key di Settings."
+
         val json = JSONObject().apply {
             put("model", "deepseek-chat")
             put("messages", JSONArray().apply {
                 put(JSONObject().apply {
                     put("role", "system")
-                    put("content", "You are an expert crypto/forex trading bot. You analyze market data, tick by tick, create methods based on candlestick patterns (Price Action, Break & Retest, Following the Trend, Momentum, Reversal, SMC, ICT, CRT) and give specific entry positions with Take Profit and Stop Loss.")
+                    put("content", "You are an ICT/SMC XAUUSD mapping assistant. Return valid JSON only. Do not add markdown, explanations outside JSON, or non-JSON text.")
                 })
                 put(JSONObject().apply {
                     put("role", "user")
                     put("content", prompt)
                 })
             })
-            put("temperature", 0.7)
+            put("temperature", 0.2)
         }
 
         val body = json.toString().toRequestBody("application/json".toMediaType())
         val request = Request.Builder()
             .url("https://api.deepseek.com/chat/completions")
             .addHeader("Authorization", "Bearer $apiKey")
+            .addHeader("Content-Type", "application/json")
             .post(body)
             .build()
-            
+
         try {
             client.newCall(request).execute().use { response ->
+                val resStr = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
-                     return@withContext "Error compiling analysis."
+                    return@withContext when (response.code) {
+                        400 -> "DeepSeek API error 400: format request salah atau model tidak diterima."
+                        401 -> "DeepSeek API error 401: API key DeepSeek salah, expired, atau bukan key DeepSeek."
+                        402 -> "DeepSeek API error 402: saldo/credit DeepSeek tidak cukup."
+                        429 -> "DeepSeek API error 429: rate limit DeepSeek tercapai. Coba lagi nanti."
+                        500, 502, 503, 504 -> "DeepSeek API error ${response.code}: server DeepSeek sedang bermasalah."
+                        else -> "DeepSeek API error ${response.code}: ${resStr.take(180)}"
+                    }
                 }
-                val resStr = response.body?.string() ?: "{}"
+
+                if (resStr.isBlank()) return@withContext "DeepSeek response kosong."
+
                 val resJson = JSONObject(resStr)
                 val choices = resJson.optJSONArray("choices")
                 if (choices != null && choices.length() > 0) {
-                    return@withContext choices.getJSONObject(0).optJSONObject("message")?.optString("content", "") ?: ""
+                    return@withContext choices.getJSONObject(0)
+                        .optJSONObject("message")
+                        ?.optString("content", "")
+                        ?.trim()
+                        .orEmpty()
                 }
-                "No response"
+
+                "DeepSeek response tidak punya choices."
             }
         } catch (e: Exception) {
-            e.printStackTrace()
-            "Network error communicating with DeepSeek API."
+            "Network error ke DeepSeek: ${e.message ?: "unknown"}"
         }
     }
 }
